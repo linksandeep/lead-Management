@@ -1,225 +1,54 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Lead from '../models/Lead';
-import User from '../models/User';
 import type { 
   CreateLeadInput, 
   UpdateLeadInput, 
   AssignLeadInput, 
   AddNoteInput
 } from '../types';
-import { importLeadsFromGoogleSheetService } from '../service/lead.service';
+import { assignLeadsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService } from '../service/lead.service';
 import { sendError } from '../utils/sendError';
 
-export const getLeads = async (req: Request, res: Response): Promise<void> => {
+
+
+
+export const getLeads = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      status, 
-      source, 
-      priority, 
-      assignedTo, 
-      folder,
-      search,
-      dateRange
-    } = req.query;
-    
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
-    const skip = (pageNum - 1) * limitNum;
+    const pageNum = parseInt((req.query.page as string) || '1', 10);
+    const limitNum = parseInt((req.query.limit as string) || '10', 10);
 
-    // Build filter based on user role
-    const filter: any = {};
-    
-    // If user is not admin, only show their assigned leads
-    if (req.user?.role !== 'admin') {
-      filter.assignedTo = req.user?.userId;
-    }
+    // ✅ NEW: If folder is Duplicate → call duplicate service
+    if (req.query.folder === 'Duplicate') {
+      const { leads, total } = await getDuplicateLeadsService(req);
 
-    // Apply additional filters
-    if (status) {
-      const statusArray = Array.isArray(status) ? status : [status];
-      filter.status = { $in: statusArray };
-    }
-    
-    if (source) {
-      const sourceArray = Array.isArray(source) ? source : [source];
-      filter.source = { $in: sourceArray };
-    }
-    
-    if (priority) {
-      const priorityArray = Array.isArray(priority) ? priority : [priority];
-      filter.priority = { $in: priorityArray };
-    }
-    
-    if (assignedTo && req.user?.role === 'admin') {
-      const assignedToArray = Array.isArray(assignedTo) ? assignedTo : [assignedTo];
-      
-      // Check if filtering for unassigned leads (null values)
-      const hasUnassignedFilter = assignedToArray.includes(null as any) || 
-                                  assignedToArray.includes('null') || 
-                                  assignedToArray.includes('unassigned');
-      const otherAssignees = assignedToArray.filter(id => 
-        id !== null && 
-        id !== 'null' && 
-        id !== 'unassigned'
-      );
-      
-      if (hasUnassignedFilter && otherAssignees.length === 0) {
-        // Only looking for unassigned leads
-        filter.assignedTo = { $in: [null, undefined] };
-      } else if (hasUnassignedFilter && otherAssignees.length > 0) {
-        // Looking for both unassigned and specific assignees
-        filter.$or = [
-          { assignedTo: { $in: [null, undefined] } },
-          { assignedTo: { $in: otherAssignees } }
-        ];
-      } else {
-        // Only looking for specific assignees
-        filter.assignedTo = { $in: assignedToArray };
-      }
-    }
-    
-    if (folder) {
-      const folderArray = Array.isArray(folder) ? folder : [folder];
-      
-      // Check if filtering for empty folders (default/uncategorized folder)
-      const hasEmptyFilter = folderArray.includes('') || folderArray.includes('null') || folderArray.includes('undefined') || folderArray.includes('Uncategorized');
-      const otherFolders = folderArray.filter(f => f !== '' && f !== 'null' && f !== 'undefined' && f !== 'Uncategorized');
-      
-      if (hasEmptyFilter && otherFolders.length === 0) {
-        // Only looking for leads with empty folder (default folder)
-        filter.$or = [
-          { folder: '' },
-          { folder: { $exists: false } },
-          { folder: null }
-        ];
-      } else if (hasEmptyFilter && otherFolders.length > 0) {
-        // Looking for both empty folders and specific folders
-        filter.$or = [
-          { folder: '' },
-          { folder: { $exists: false } },
-          { folder: null },
-          { folder: { $in: otherFolders } }
-        ];
-      } else {
-        // Only looking for specific folders
-        filter.folder = { $in: folderArray };
-      }
-    }
-    
-    if (search) {
-      // Escape special regex characters to prevent regex errors
-      const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const searchStr = (search as string).trim();
-      const isEmail = searchStr.includes('@');
-      const isNumber = /^\d{6,}$/.test(searchStr.replace(/\D/g, '')) && !/[a-zA-Z]/.test(searchStr); // 6+ digits, no letters
-      if (isEmail || (!isNumber && /[a-zA-Z]/.test(searchStr))) {
-        // Search as email or name (old logic)
-        const searchRegex = new RegExp(escapeRegex(searchStr), 'i'); // case-insensitive
-        const textOrConditions = [
-          { name: searchRegex },
-          { email: searchRegex },
-          { position: searchRegex }
-        ];
-        if (filter.$or) {
-          filter.$and = [
-            { $or: filter.$or },
-            { $or: textOrConditions }
-          ];
-          delete filter.$or;
-        } else {
-          filter.$or = textOrConditions;
+      const totalPages = Math.ceil(total / limitNum);
+
+      res.status(200).json({
+        success: true,
+        message: 'Duplicate leads retrieved successfully',
+        data: leads,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages
         }
-      } else if (isNumber) {
-        // Search as phone (digit-insensitive)
-        const digitsOnly = searchStr.replace(/\D/g, '');
-        // Chain $replaceAll for each non-digit character
-        const phoneDigitsExpr = {
-          $replaceAll: {
-            input: {
-              $replaceAll: {
-                input: {
-                  $replaceAll: {
-                    input: {
-                      $replaceAll: {
-                        input: {
-                          $replaceAll: {
-                            input: "$phone",
-                            find: "+",
-                            replacement: ""
-                          }
-                        },
-                        find: "-",
-                        replacement: ""
-                      }
-                    },
-                    find: " ",
-                    replacement: ""
-                  }
-                },
-                find: "(",
-                replacement: ""
-              }
-            },
-            find: ")",
-            replacement: ""
-          }
-        };
-        const phoneExpr = {
-          $expr: {
-            $regexMatch: {
-              input: phoneDigitsExpr,
-              regex: digitsOnly
-            }
-          }
-        };
-        if (filter.$or) {
-          filter.$and = [
-            { $or: filter.$or },
-            phoneExpr
-          ];
-          delete filter.$or;
-        } else {
-          Object.assign(filter, phoneExpr);
-        }
-      }
-    }
-    
-    if (dateRange) {
-      try {
-        const range = typeof dateRange === 'string' ? JSON.parse(dateRange) : dateRange;
-        if (range.from && range.to) {
-          filter.createdAt = {
-            $gte: new Date(range.from),
-            $lte: new Date(range.to)
-          };
-        }
-      } catch (error) {
-        // Invalid date range format, ignore
-      }
+      });
+      return;
     }
 
-    // Get leads and total count
-    const [leads, total] = await Promise.all([
-      Lead.find(filter)
-        .populate('assignedToUser', 'name email')
-        .populate('assignedByUser', 'name email')
-        .populate('notes.createdBy', 'name email')
-        .sort({ createdAt: 1 }) // Sort by last updated (newest first)
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Lead.countDocuments(filter)
-    ]);
-
+    // Existing flow (UNCHANGED)
+    const { leads, total } = await getLeadsService(req);
     const totalPages = Math.ceil(total / limitNum);
 
     res.status(200).json({
       success: true,
-      message: 'Leads retrieved successfully',
-      data: leads, // Use leads directly since they're already sorted by updatedAt
+      message: 'Leads retrieved successfully--;',
+      data: leads,
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -229,13 +58,20 @@ export const getLeads = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error('Get leads error:', error);
+
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve leads',
-      errors: [error instanceof Error ? error.message : 'Unknown error occurred']
+      errors: [
+        error instanceof Error
+          ? error.message
+          : 'Unknown error occurred'
+      ]
     });
   }
 };
+
+
 
 export const getLeadById = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -530,76 +366,33 @@ export const deleteLead = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
-export const assignLeads = async (req: Request, res: Response): Promise<void> => {
+export const assignLeads = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
-    const { leadIds, assignToUserId }: AssignLeadInput = req.body;
-
-    // Only admins can assign leads
+    // ✅ Admin check
     if (req.user?.role !== 'admin') {
-      res.status(403).json({
-        success: false,
-        message: 'Admin access required'
-      });
-      return;
+      const err: any = new Error('Admin access required');
+      err.statusCode = 403;
+      throw err;
     }
 
-    // Validate input
-    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
-      res.status(400).json({
-        success: false,
-        message: 'Lead IDs are required',
-        errors: ['Please provide an array of lead IDs']
-      });
-      return;
-    }
+    const payload = req.body as AssignLeadInput;
 
-    if (!assignToUserId) {
-      res.status(400).json({
-        success: false,
-        message: 'User ID is required',
-        errors: ['Please provide a user ID to assign leads to']
-      });
-      return;
-    }
-
-    // Check if the user exists
-    const assignToUser = await User.findById(assignToUserId);
-    if (!assignToUser) {
-      res.status(404).json({
-        success: false,
-        message: 'User not found',
-        errors: ['The specified user does not exist']
-      });
-      return;
-    }
-
-    // Update leads
-    const result = await Lead.updateMany(
-      { _id: { $in: leadIds } },
-      { 
-        assignedTo: assignToUserId,
-        assignedBy: req.user?.userId,
-        updatedAt: new Date()
-      }
+    const result = await assignLeadsService(
+      payload,
+      req.user!.userId.toString()
     );
-
-    // Get updated leads
-    const updatedLeads = await Lead.find({ _id: { $in: leadIds } })
-      .populate('assignedToUser', 'name email')
-      .populate('assignedByUser', 'name email');
 
     res.status(200).json({
       success: true,
       message: `${result.modifiedCount} leads assigned successfully`,
-      data: updatedLeads
+      data: result.leads
     });
   } catch (error) {
     console.error('Assign leads error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to assign leads',
-      errors: [error instanceof Error ? error.message : 'Unknown error occurred']
-    });
+    sendError(res, error, 500);
   }
 };
 
@@ -785,168 +578,24 @@ export const addNote = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const getMyLeads = async (req: Request, res: Response): Promise<void> => {
+
+export const getMyLeads = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
-    const { 
-      page = 1, 
-      limit = 10,
-      status,
-      source,
-      priority,
-      folder,
-      search
-    } = req.query;
-    
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
-    const skip = (pageNum - 1) * limitNum;
+    const result = await getMyLeadsService(req);
 
-    const filter: any = { assignedTo: req.user?.userId };
-
-    // Apply additional filters
-    if (status) {
-      const statusArray = Array.isArray(status) ? status : [status];
-      filter.status = { $in: statusArray };
-    }
-    
-    if (source) {
-      const sourceArray = Array.isArray(source) ? source : [source];
-      filter.source = { $in: sourceArray };
-    }
-    
-    if (priority) {
-      const priorityArray = Array.isArray(priority) ? priority : [priority];
-      filter.priority = { $in: priorityArray };
-    }
-    
-    if (folder) {
-      const folderArray = Array.isArray(folder) ? folder : [folder];
-      
-      // Check if filtering for empty folders (default/uncategorized folder)
-      const hasEmptyFilter = folderArray.includes('') || folderArray.includes('null') || folderArray.includes('undefined') || folderArray.includes('Uncategorized');
-      const otherFolders = folderArray.filter(f => f !== '' && f !== 'null' && f !== 'undefined' && f !== 'Uncategorized');
-      
-      if (hasEmptyFilter && otherFolders.length === 0) {
-        // Only looking for leads with empty folder (default folder)
-        filter.$or = [
-          { folder: '' },
-          { folder: { $exists: false } },
-          { folder: null }
-        ];
-      } else if (hasEmptyFilter && otherFolders.length > 0) {
-        // Looking for both empty folders and specific folders
-        filter.$or = [
-          { folder: '' },
-          { folder: { $exists: false } },
-          { folder: null },
-          { folder: { $in: otherFolders } }
-        ];
-      } else {
-        // Only looking for specific folders
-        filter.folder = { $in: folderArray };
-      }
-    }
-    
-    if (search) {
-      // Escape special regex characters to prevent regex errors
-      const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const searchStr = (search as string).trim();
-      const isEmail = searchStr.includes('@');
-      const isNumber = /^\d{6,}$/.test(searchStr.replace(/\D/g, '')) && !/[a-zA-Z]/.test(searchStr); // 6+ digits, no letters
-      if (isEmail || (!isNumber && /[a-zA-Z]/.test(searchStr))) {
-        // Search as email or name (old logic)
-        const searchRegex = new RegExp(escapeRegex(searchStr), 'i'); // case-insensitive
-        const textOrConditions = [
-          { name: searchRegex },
-          { email: searchRegex },
-          { position: searchRegex }
-        ];
-        if (filter.$or) {
-          filter.$and = [
-            { $or: filter.$or },
-            { $or: textOrConditions }
-          ];
-          delete filter.$or;
-        } else {
-          filter.$or = textOrConditions;
-        }
-      } else if (isNumber) {
-        // Search as phone (digit-insensitive)
-        const digitsOnly = searchStr.replace(/\D/g, '');
-        // Chain $replaceAll for each non-digit character
-        const phoneDigitsExpr = {
-          $replaceAll: {
-            input: {
-              $replaceAll: {
-                input: {
-                  $replaceAll: {
-                    input: {
-                      $replaceAll: {
-                        input: {
-                          $replaceAll: {
-                            input: "$phone",
-                            find: "+",
-                            replacement: ""
-                          }
-                        },
-                        find: "-",
-                        replacement: ""
-                      }
-                    },
-                    find: " ",
-                    replacement: ""
-                  }
-                },
-                find: "(",
-                replacement: ""
-              }
-            },
-            find: ")",
-            replacement: ""
-          }
-        };
-        const phoneExpr = {
-          $expr: {
-            $regexMatch: {
-              input: phoneDigitsExpr,
-              regex: digitsOnly
-            }
-          }
-        };
-        if (filter.$or) {
-          filter.$and = [
-            { $or: filter.$or },
-            phoneExpr
-          ];
-          delete filter.$or;
-        } else {
-          Object.assign(filter, phoneExpr);
-        }
-      }
-    }
-
-    // Get leads and total count
-    const [leads, total] = await Promise.all([
-      Lead.find(filter)
-        .populate('assignedByUser', 'name email')
-        .populate('notes.createdBy', 'name email')
-        .sort({ createdAt: 1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Lead.countDocuments(filter)
-    ]);
-
-    const totalPages = Math.ceil(total / limitNum);
+    const totalPages = Math.ceil(result.total / result.limit);
 
     res.status(200).json({
       success: true,
       message: 'My leads retrieved successfully',
-      data: leads, // Use leads directly since they're already sorted by createdAt
+      data: result.leads,
       pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
         totalPages
       }
     });
@@ -959,6 +608,7 @@ export const getMyLeads = async (req: Request, res: Response): Promise<void> => 
     });
   }
 };
+
 
 // Get distinct folders for filtering
 export const getDistinctFolders = async (req: Request, res: Response): Promise<void> => {
@@ -1093,5 +743,33 @@ export const importLeadsFromGoogleSheet = async (
     });
   } catch (error) {
     return sendError(res, error);
+  }
+};
+
+
+export const getDuplicateAndUncategorizedCounts = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const counts = await getDuplicateAndUncategorizedCountService(req);
+
+    res.status(200).json({
+      success: true,
+      message: 'Lead counts retrieved successfully',
+      data: counts
+    });
+  } catch (error) {
+    console.error('Get lead counts error:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve lead counts',
+      errors: [
+        error instanceof Error
+          ? error.message
+          : 'Unknown error occurred'
+      ]
+    });
   }
 };

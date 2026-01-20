@@ -13,7 +13,8 @@ import {
   getMyLeadsStats,
   getDistinctFolders,
   getFolderCounts,
-  importLeadsFromGoogleSheet
+  importLeadsFromGoogleSheet,
+  getDuplicateAndUncategorizedCounts,
 } from '../controllers/leadController';
 import { 
   analyzeExcelFile,
@@ -38,6 +39,8 @@ router.get('/my-leads/stats', getMyLeadsStats);
 router.get('/folders', getDistinctFolders);
 // Get folder counts for better performance
 router.get('/folder-counts', getFolderCounts);
+// Duplicate leads (admin only)
+// router.get('/duplicates', requireAdmin, getLeadsDup);
 
 // Lead assignment (admin only)
 router.post('/assign', requireAdmin, assignLeads);
@@ -54,12 +57,12 @@ router.get('/import/fields', requireAdmin, getLeadFields);
 router.post('/import/analyze', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, analyzeExcelFile);
 router.post('/import/preview', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, getSheetPreview);
 router.post('/import', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, importWithMapping);
-router.post('/import/google-sheet', importLeadsFromGoogleSheet);
+router.post('/import/google-sheet',requireAdmin, importLeadsFromGoogleSheet);
 // CRUD operations
 router.get('/', getLeads); // Get all leads (filtered by role)
 router.get('/:id', getLeadById); // Get single lead
 router.post('/', createLead); // Create new lead
 router.put('/:id', updateLead); // Update lead
 router.delete('/:id', requireAdmin, deleteLead); // Delete lead (admin only)
-
+router.get("/counts/summary",getDuplicateAndUncategorizedCounts)
 export default router;

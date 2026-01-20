@@ -1,6 +1,22 @@
 import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
 
+
+export type AssignmentSource =
+  | 'Manual'
+  | 'Bulk'
+  | 'Import'
+  | 'Reimport'
+  | 'System';
+
+export interface IAssignmentHistory {
+  assignedTo: mongoose.Types.ObjectId;
+  assignedBy?: mongoose.Types.ObjectId | null;
+  assignedAt: Date;
+  source: AssignmentSource;
+}
+
+
 // User Types
 export interface IUser extends Document {
   name: string;
@@ -26,7 +42,6 @@ export interface LoginInput {
   password: string;
 }
 
-// Lead Types
 export interface ILead extends Document {
   name: string;
   email: string;
@@ -36,14 +51,27 @@ export interface ILead extends Document {
   source: LeadSource;
   status: LeadStatus;
   priority: LeadPriority;
+
   assignedTo?: mongoose.Types.ObjectId;
   assignedBy?: mongoose.Types.ObjectId;
+
+  /**  THIS WAS MISSING */
+  assignmentHistory: IAssignmentHistory[];
+
   notes: ILeadNote[];
   leadScore?: number;
+
   createdAt: Date;
   updatedAt: Date;
+
+  /** methods */
   addNote(content: string, createdBy: mongoose.Types.ObjectId): Promise<this>;
+
+  /** virtuals (optional but recommended) */
+  assignmentCount?: number;
+  wasReassigned?: boolean;
 }
+
 
 export interface ILeadModel extends mongoose.Model<ILead> {
   findDuplicates(email: string, phone: string, excludeId?: string): Promise<ILead[]>;

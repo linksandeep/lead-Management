@@ -67,41 +67,77 @@ const leadSchema = new Schema<ILead>({
     required: [true, 'Source is required'],
     default: 'Manual'
   },
-  status: {
-    type: String,
-    default: 'New',
-    required: true,
-    trim: true,
-    maxlength: [50, 'Status cannot exceed 50 characters']
-  },
-  priority: {
-    type: String,
-    enum: ['High', 'Medium', 'Low'] as LeadPriority[],
-    default: 'Medium',
-    required: true
-  },
-  assignedTo: {
-    type: Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  assignedBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'User'
-  },
-  notes: [leadNoteSchema],
-  leadScore: {
-    type: Number,
-    min: 0,
-    max: 100,
-    default: 50
-  }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+    status: {
+      type: String,
+      default: 'New',
+      required: true,
+      trim: true,
+      maxlength: [50, 'Status cannot exceed 50 characters']
+    },
+    priority: {
+      type: String,
+      enum: ['High', 'Medium', 'Low'] as LeadPriority[],
+      default: 'Medium',
+      required: true
+    },
 
-// Indexes for better performance
+    assignedTo: {
+      type: Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    assignedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User'
+    },
+
+    /* =======================
+       Assignment History
+    ======================= */
+    assignmentHistory: [
+      {
+        assignedTo: {
+          type: Schema.Types.ObjectId,
+          ref: 'User',
+          required: true
+        },
+        assignedBy: {
+          type: Schema.Types.ObjectId,
+          ref: 'User'
+        },
+        assignedAt: {
+          type: Date,
+          default: Date.now
+        },
+        source: {
+          type: String,
+          enum: ['Manual', 'Bulk', 'Import', 'Reimport', 'System'],
+          default: 'Manual'
+        }
+      }
+    ],
+
+    notes: [leadNoteSchema],
+
+    leadScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50
+    }
+  },
+  {
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+  }
+);
+
+/* =======================
+   Indexes
+======================= */
+
+leadSchema.index({ email: 1 }, { unique: true });
+leadSchema.index({ phone: 1 }, { unique: true });
 leadSchema.index({ status: 1 });
 leadSchema.index({ source: 1 });
 leadSchema.index({ priority: 1 });
@@ -118,7 +154,6 @@ leadSchema.index({ priority: 1, status: 1 });
 leadSchema.index({ folder: 1, status: 1 });
 leadSchema.index({ folder: 1, assignedTo: 1 });
 
-// Text index for search functionality
 leadSchema.index({
   name: 'text',
   email: 'text',
@@ -127,7 +162,10 @@ leadSchema.index({
   folder: 'text'
 });
 
-// Virtual populate for assigned user
+/* =======================
+   Virtual Populates
+======================= */
+
 leadSchema.virtual('assignedToUser', {
   ref: 'User',
   localField: 'assignedTo',
@@ -135,7 +173,6 @@ leadSchema.virtual('assignedToUser', {
   justOne: true
 });
 
-// Virtual populate for assigned by user
 leadSchema.virtual('assignedByUser', {
   ref: 'User',
   localField: 'assignedBy',
@@ -143,9 +180,24 @@ leadSchema.virtual('assignedByUser', {
   justOne: true
 });
 
-// Helper method to get notes with populated users
+/* =======================
+   UI Helper Virtuals
+======================= */
+
+leadSchema.virtual('assignmentCount').get(function () {
+  return this.assignmentHistory?.length || 0;
+});
+
+leadSchema.virtual('wasReassigned').get(function () {
+  return (this.assignmentHistory?.length || 0) > 1;
+});
+
+/* =======================
+   Methods
+======================= */
+
 leadSchema.methods.getNotesWithUsers = async function () {
-  await this.populate('notes.createdBy', 'name email role'); // populate only required fields
+  await this.populate('notes.createdBy', 'name email role');
 
   return this.notes.map((note: ILeadNote & { createdBy: IUser }) => ({
     id: note.id,
@@ -159,8 +211,6 @@ leadSchema.methods.getNotesWithUsers = async function () {
     }
   }));
 };
-
-// Static method to get lead statistics
 leadSchema.statics.getLeadStats = async function (userId?: string) {
   const baseMatch = userId ? { assignedTo: userId } : {};
 
