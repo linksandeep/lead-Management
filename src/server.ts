@@ -5,6 +5,8 @@ import compression from 'compression';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 
 import { connectDatabase } from './utils/database';
 import routes from './routes';
@@ -26,14 +28,39 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Trust proxy for accurate IP addresses
+// 🚨 IMPORTANT: create HTTP server ONCE
+const httpServer = http.createServer(app);
+
+// ================= SOCKET.IO SETUP =================
+export const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log('🔌 Socket connected:', socket.id);
+
+  socket.on('join', (userId: string) => {
+    socket.join(userId); // room = userId
+    console.log(`👤 User joined room: ${userId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('❌ Socket disconnected:', socket.id);
+  });
+});
+// ==================================================
+
+// Trust proxy
 app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
   crossOriginEmbedderPolicy: false // Allow embedding for development
 }));
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(securityHeaders);
 
 // Rate limiting - applies to all /api routes but skips authenticated users
@@ -43,7 +70,7 @@ const limiter = createRateLimiter(
 );
 app.use('/api', limiter);
 
-// Compression and logging
+// Compression & logging
 app.use(compression());
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -61,8 +88,6 @@ app.use(express.urlencoded({
   extended: true, 
   limit: process.env.UPLOAD_MAX_SIZE || '10mb' 
 }));
-
-// Body parser error handling
 app.use(bodyParserErrorHandler);
 
 // Static file serving for uploads (create uploads directory if it doesn't exist)
@@ -101,6 +126,7 @@ app.get('/', (_req, res) => {
   });
 });
 
+
 // Error handling
 app.use(notFoundHandler);
 app.use(errorHandler);
@@ -128,40 +154,49 @@ const ensureSystemUser = async (): Promise<void> => {
   }
 };
 
-// Graceful shutdown handler
-const gracefulShutdown = (signal: string) => {
-  console.log(`📴 Received ${signal}, shutting down gracefully`);
-  
-  // Close server
-  server.close((err: Error | undefined) => {
-    if (err) {
-      console.error('❌ Error during server close:', err);
-      process.exit(1);
-    }
-    
-    console.log('📴 HTTP server closed');
-    process.exit(0);
-  });
-  
-  // Force close after 10 seconds
-  setTimeout(() => {
-    console.error('❌ Forced shutdown after timeout');
-    process.exit(1);
-  }, 10000);
-};
 
-// Start server
-const startServer = async (): Promise<any> => {
-  try {
-    // Connect to database
-    await connectDatabase();
+// const gracefulShutdown = (signal: string) => {
+//   console.log(`📴 Received ${signal}, shutting down gracefully`);
+  
+//   // Close server
+//   server.close((err: Error | undefined) => {
+//     if (err) {
+//       console.error('❌ Error during server close:', err);
+//       process.exit(1);
+//     }
     
-    // Ensure system user exists
+//     console.log('📴 HTTP server closed');
+//     process.exit(0);
+//   });
+  
+//   // Force close after 10 seconds
+//   setTimeout(() => {
+//     console.error('❌ Forced shutdown after timeout');
+//     process.exit(1);
+//   }, 10000);
+// };
+
+// // Start server
+// const startServer = async (): Promise<any> => {
+//   try {
+//     // Connect to database
+//     await connectDatabase();
+    
+//     // Ensure system user exists
+//     await ensureSystemUser();
+
+
+
+// ================= SERVER START =================
+let server: http.Server;
+
+const startServer = async () => {
+  try {
+    await connectDatabase();
     await ensureSystemUser();
 
-    // Start listening
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+    server = httpServer.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 API Base URL: http://localhost:${PORT}${process.env.API_PREFIX || '/api'}`);
       console.log(`🏥 Health Check: http://localhost:${PORT}/health`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -171,13 +206,13 @@ const startServer = async (): Promise<any> => {
       }
     });
 
-    // Set keep-alive timeout
+        // Set keep-alive timeout
     server.keepAliveTimeout = 65000;
     server.headersTimeout = 66000;
 
     // Handle graceful shutdown
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
 
     return server;
   } catch (error) {
@@ -186,22 +221,21 @@ const startServer = async (): Promise<any> => {
   }
 };
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
-});
+// ================= GRACEFUL SHUTDOWN =================
+const shutdown = () => {
+  console.log('📴 Shutting down...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+  setTimeout(() => process.exit(1), 10000);
+};
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  process.exit(1);
-});
+// Safety
+process.on('unhandledRejection', console.error);
+process.on('uncaughtException', console.error);
 
-// Start the server
-let server: any;
-startServer().then((s) => {
-  server = s;
-});
+// Start
+startServer();
 
 export default app;

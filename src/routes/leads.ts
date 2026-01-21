@@ -15,6 +15,8 @@ import {
   getFolderCounts,
   importLeadsFromGoogleSheet,
   getDuplicateAndUncategorizedCounts,
+  genRem,
+  getMyReminders,
 } from '../controllers/leadController';
 import { 
   analyzeExcelFile,
@@ -24,6 +26,7 @@ import {
 } from '../controllers/excelController';
 import { uploadExcel, handleUploadError, validateFilePresence } from '../middleware/upload';
 import { authenticateToken, requireAuth, requireAdmin } from '../middleware/auth';
+import reminder from '../models/reminder';
 
 const router = Router();
 
@@ -58,6 +61,9 @@ router.post('/import/analyze', requireAdmin, uploadExcel, handleUploadError, val
 router.post('/import/preview', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, getSheetPreview);
 router.post('/import', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, importWithMapping);
 router.post('/import/google-sheet',requireAdmin, importLeadsFromGoogleSheet);
+
+router.post("/reminders",genRem)
+router.get('/myreminders', getMyReminders);
 // CRUD operations
 router.get('/', getLeads); // Get all leads (filtered by role)
 router.get('/:id', getLeadById); // Get single lead
@@ -65,4 +71,6 @@ router.post('/', createLead); // Create new lead
 router.put('/:id', updateLead); // Update lead
 router.delete('/:id', requireAdmin, deleteLead); // Delete lead (admin only)
 router.get("/counts/summary",getDuplicateAndUncategorizedCounts)
+
+
 export default router;
