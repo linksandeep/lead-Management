@@ -592,7 +592,7 @@ export const bulkUpdateStatus = async (req: Request, res: Response): Promise<voi
       { 
         $set: { 
           status: status.trim(),
-          folder:status.trim(),
+          // folder:status.trim(),
           updatedAt: new Date()
         }
       }
