@@ -16,12 +16,12 @@ export const getMyReminders = async (req: Request, res: Response) => {
 
     //  Use the correct model name
     const reminders = await Reminder.find({
-      user: req.user.userId,
-      status: 'pending',
-    })
-      .sort({ remindAt: 1 })
-      .lean();
-
+        user: req.user.userId,
+        action: { $ne: 'done' }
+      })
+        .sort({ remindAt: 1 })
+        .lean();
+      
     return res.json({
       success: true,
       data: reminders,
@@ -105,6 +105,7 @@ export const updateReminder = async (req: Request, res: Response) => {
           fromTime: new Date().toISOString()
         });
       } else if (action === 'done') {
+      updateData.action='done'
       updateData.status = 'triggered';
     }
     // Old format (backward compatibility)

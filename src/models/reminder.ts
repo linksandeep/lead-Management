@@ -1,4 +1,3 @@
-// models/Reminder.ts
 import mongoose from 'mongoose';
 
 const reminderSchema = new mongoose.Schema({
@@ -16,7 +15,14 @@ const reminderSchema = new mongoose.Schema({
     default: 'pending'
   },
 
-  createdAt: { type: Date, default: Date.now }
+  action: {
+    type: String,
+    enum: ['none', 'done', 'snooze', 'dismissed'],
+    default: 'none'
+  }
+
+}, {
+  timestamps: true  // ⏱ adds createdAt & updatedAt automatically
 });
 
 export default mongoose.model('Reminder', reminderSchema);
