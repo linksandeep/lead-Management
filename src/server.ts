@@ -38,6 +38,7 @@ export const io = new SocketIOServer(httpServer, {
     methods: ['GET', 'POST']
   }
 });
+import './corn';
 
 io.on('connection', (socket) => {
   console.log('🔌 Socket connected:', socket.id);

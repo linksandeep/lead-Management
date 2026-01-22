@@ -105,8 +105,10 @@ export const getMyReminders = async (req: Request, res: Response) => {
   }
 };
 
+
+
 export const genRem = async (req: Request, res: Response) => {
-  console.log("🟢 [REMINDER API HIT]");
+  console.log("[REMINDER API HIT]");
   console.log("📥 Request Body:", req.body);
   console.log("👤 User ID:", req.user?.userId);
 
@@ -117,7 +119,6 @@ export const genRem = async (req: Request, res: Response) => {
        BASIC VALIDATION
     ========================= */
     if (!leadId || !title || !remindAt) {
-      console.error("❌ Missing required fields");
       return res.status(400).json({
         success: false,
         message: "leadId, title and remindAt are required"
@@ -125,7 +126,6 @@ export const genRem = async (req: Request, res: Response) => {
     }
 
     if (!req.user?.userId) {
-      console.error("❌ Unauthorized request");
       return res.status(401).json({
         success: false,
         message: "Unauthorized"
@@ -133,11 +133,10 @@ export const genRem = async (req: Request, res: Response) => {
     }
 
     /* =========================
-       CHECK USER STATUS
+       CHECK USER
     ========================= */
-    const user = await User.findById(req.user.userId).select("isActive name email");
+    const user = await User.findById(req.user.userId).select("isActive");
     if (!user || !user.isActive) {
-      console.error("❌ Inactive or invalid user");
       return res.status(403).json({
         success: false,
         message: "User is inactive or not found"
@@ -145,11 +144,10 @@ export const genRem = async (req: Request, res: Response) => {
     }
 
     /* =========================
-       CHECK LEAD EXISTS
+       CHECK LEAD
     ========================= */
-    const lead = await Lead.findById(leadId).select("name assignedTo");
+    const lead = await Lead.findById(leadId).select("name");
     if (!lead) {
-      console.error("❌ Lead not found:", leadId);
       return res.status(404).json({
         success: false,
         message: "Lead not found"
@@ -159,9 +157,7 @@ export const genRem = async (req: Request, res: Response) => {
     /* =========================
        CREATE REMINDER
     ========================= */
-    console.log("💾 Creating reminder...");
-
-    const Reminder = await reminder.create({
+    const newReminder = await reminder.create({
       user: req.user.userId,
       lead: leadId,
       title: title.trim(),
@@ -170,20 +166,16 @@ export const genRem = async (req: Request, res: Response) => {
       status: "pending"
     });
 
-    console.log("✅ Reminder created successfully");
-    console.log("🆔 Reminder ID:", Reminder._id);
-    console.log("📌 Lead:", lead.name);
+    console.log("✅ Reminder created:", newReminder._id);
 
     return res.status(201).json({
       success: true,
       message: "Reminder created successfully",
-      data: Reminder
+      data: newReminder
     });
 
   } catch (error: any) {
-    console.error("🔥 CREATE REMINDER ERROR");
-    console.error("Message:", error.message);
-    console.error("Stack:", error.stack);
+    console.error("🔥 CREATE REMINDER ERROR:", error.message);
 
     return res.status(500).json({
       success: false,
@@ -191,6 +183,7 @@ export const genRem = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 export const getLeadById = async (req: Request, res: Response): Promise<void> => {
   try {
