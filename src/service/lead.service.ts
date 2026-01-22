@@ -14,7 +14,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     throw err;
   }
 
-  console.log('📥 Total rows received:', rows.length);
+  console.log(' Total rows received:', rows.length);
 
   const requiredFields = ['name', 'email', 'phone'];
 
@@ -30,7 +30,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
 
     console.log(`➡️ Processing row ${rowNumber}`, row);
 
-    // ✅ Validate required fields
+    //  Validate required fields
     for (const field of requiredFields) {
       if (!row[field] || !row[field].toString().trim()) {
         const err: any = new Error(
@@ -48,14 +48,14 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
 
     console.log('👤 assignedToName:', assignedToName || 'EMPTY');
 
-    // ✅ Find existing lead
+    //  Find existing lead
     const existingLead = await Lead.findOne({
       $or: [{ email }, { phone }]
     });
 
     console.log('🔍 existingLead:', existingLead?._id || 'NOT FOUND');
 
-    // ✅ Resolve assigned user
+    //  Resolve assigned user
     let assignedUser = null;
     if (assignedToName) {
       assignedUser = await User.findOne({
@@ -96,14 +96,25 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
           : []
       });
 
-      console.log('✅ New lead created:', newLead._id);
+      console.log(' New lead created:', newLead._id);
 
       insertedCount++;
       continue;
     }
 
     // ─────────────────────────────────────────────
-    // 🆕 CASE 2: EXISTING LEAD — ALREADY ASSIGNED
+    //  CASE 2: UPDATE EXISTING LEAD'S FOLDER TO "DUPLICATE"
+    // ─────────────────────────────────────────────
+    //  ADDED: Update folder to "duplicate" for existing lead
+    if (existingLead) {
+      // Update the existing lead's folder to "duplicate"
+      existingLead.folder = 'Dupicate';
+      await existingLead.save();
+      console.log('📁 Updated existing lead folder to "duplicate":', existingLead._id);
+    }
+
+    // ─────────────────────────────────────────────
+    // CASE 3: EXISTING LEAD — ALREADY ASSIGNED
     // ─────────────────────────────────────────────
     if (existingLead.assignedTo) {
       console.log('🔁 Lead already assigned, keeping same user');
@@ -121,7 +132,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     }
 
     // ─────────────────────────────────────────────
-    // 🆕 CASE 3: EXISTING BUT NOT ASSIGNED → ASSIGN
+    // 🆕 CASE 4: EXISTING BUT NOT ASSIGNED → ASSIGN
     // ─────────────────────────────────────────────
     if (!existingLead.assignedTo && assignedUserId) {
       console.log('🟢 Assigning unassigned lead');
@@ -142,7 +153,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     }
 
     // ─────────────────────────────────────────────
-    // 🆕 CASE 4: TRUE DUPLICATE → UPDATE DUPLICATE
+    // 🆕 CASE 5: TRUE DUPLICATE → UPDATE DUPLICATE MODEL
     // ─────────────────────────────────────────────
     console.log('⚠️ Duplicate detected');
 
@@ -176,7 +187,6 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     duplicateLeads
   };
 };
-
 
 
 
@@ -363,7 +373,7 @@ export const getLeadsService = async (
       .populate('assignedToUser', 'name email')
       .populate('assignedByUser', 'name email')
 
-      // ✅ NEW: populate assignment history
+      //  NEW: populate assignment history
       .populate('assignmentHistory.assignedTo', 'name email')
       .populate('assignmentHistory.assignedBy', 'name email')
 
@@ -375,7 +385,7 @@ export const getLeadsService = async (
     Lead.countDocuments(filter)
   ]);
 
-  // ✅ NEW: enrich leads with UI-friendly flags
+  //  NEW: enrich leads with UI-friendly flags
   const leads = rawLeads.map((lead: any) => {
     const historyCount = lead.assignmentHistory?.length || 0;
 
@@ -453,7 +463,7 @@ export const getDuplicateLeadsService = async (
   const total = await DuplicateLead.countDocuments(filter);
 
   /**
-   * ✅ NORMALIZE DUPLICATE → LEAD FORMAT
+   *  NORMALIZE DUPLICATE → LEAD FORMAT
    * (THIS IS THE REQUIRED FIX)
    */
   const leads = duplicates.map((dup: any) => ({
@@ -576,8 +586,8 @@ export const getMyLeadsService = async (req: Request) => {
     Lead.find(filter)
       .populate('assignedByUser', 'name email')
       .populate('notes.createdBy', 'name email')
-      .populate('assignmentHistory.assignedTo', 'name email')   // ✅ NEW
-      .populate('assignmentHistory.assignedBy', 'name email')   // ✅ NEW
+      .populate('assignmentHistory.assignedTo', 'name email')   //  NEW
+      .populate('assignmentHistory.assignedBy', 'name email')   //  NEW
       .sort({ createdAt: 1 })
       .skip(skip)
       .limit(limitNum)

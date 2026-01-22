@@ -15,8 +15,7 @@ import {
   getFolderCounts,
   importLeadsFromGoogleSheet,
   getDuplicateAndUncategorizedCounts,
-  genRem,
-  getMyReminders,
+
 } from '../controllers/leadController';
 import { 
   analyzeExcelFile,
@@ -26,51 +25,97 @@ import {
 } from '../controllers/excelController';
 import { uploadExcel, handleUploadError, validateFilePresence } from '../middleware/upload';
 import { authenticateToken, requireAuth, requireAdmin } from '../middleware/auth';
-import reminder from '../models/reminder';
 
 const router = Router();
 
 // All lead routes require authentication
 router.use(authenticateToken, requireAuth);
 
+
+
+
+
+/* =============== LEAD FILTER & USER ROUTES =============== */
 // My leads endpoint (for users to see their assigned leads)
 router.get('/my-leads', getMyLeads);
-// My leads stats endpoint (for users to get stats for all their assigned leads)
+
+// My leads stats endpoint
 router.get('/my-leads/stats', getMyLeadsStats);
 
 // Get distinct folders for filtering
 router.get('/folders', getDistinctFolders);
+
 // Get folder counts for better performance
 router.get('/folder-counts', getFolderCounts);
-// Duplicate leads (admin only)
-// router.get('/duplicates', requireAdmin, getLeadsDup);
 
+/* =============== BULK / ASSIGNMENT =============== */
 // Lead assignment (admin only)
 router.post('/assign', requireAdmin, assignLeads);
+
 // Lead unassignment (admin only)
 router.post('/unassign', requireAdmin, unassignLeads);
+
 // Bulk update lead status
 router.put('/bulk-status', bulkUpdateStatus);
 
+/* =============== LEAD NOTES =============== */
 // Add note to lead
 router.post('/notes', addNote);
 
+/* =============== EXCEL / IMPORT =============== */
 // Smart Excel import endpoints (admin only)
 router.get('/import/fields', requireAdmin, getLeadFields);
-router.post('/import/analyze', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, analyzeExcelFile);
-router.post('/import/preview', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, getSheetPreview);
-router.post('/import', requireAdmin, uploadExcel, handleUploadError, validateFilePresence, importWithMapping);
-router.post('/import/google-sheet',requireAdmin, importLeadsFromGoogleSheet);
 
-router.post("/reminders",genRem)
-router.get('/myreminders', getMyReminders);
-// CRUD operations
-router.get('/', getLeads); // Get all leads (filtered by role)
-router.get('/:id', getLeadById); // Get single lead
-router.post('/', createLead); // Create new lead
-router.put('/:id', updateLead); // Update lead
-router.delete('/:id', requireAdmin, deleteLead); // Delete lead (admin only)
-router.get("/counts/summary",getDuplicateAndUncategorizedCounts)
+router.post(
+  '/import/analyze',
+  requireAdmin,
+  uploadExcel,
+  handleUploadError,
+  validateFilePresence,
+  analyzeExcelFile
+);
 
+router.post(
+  '/import/preview',
+  requireAdmin,
+  uploadExcel,
+  handleUploadError,
+  validateFilePresence,
+  getSheetPreview
+);
+
+router.post(
+  '/import',
+  requireAdmin,
+  uploadExcel,
+  handleUploadError,
+  validateFilePresence,
+  importWithMapping
+);
+
+router.post(
+  '/import/google-sheet',
+  requireAdmin,
+  importLeadsFromGoogleSheet
+);
+
+/* =============== LEAD CRUD =============== */
+// Get all leads (filtered by role)
+router.get('/', getLeads);
+
+// Get single lead by ID
+router.get('/:id', getLeadById);
+
+// Create a new lead
+router.post('/', createLead);
+
+// Update a lead
+router.put('/:id', updateLead);
+
+// Delete a lead (admin only)
+router.delete('/:id', requireAdmin, deleteLead);
+
+// Summary counters
+router.get('/counts/summary', getDuplicateAndUncategorizedCounts);
 
 export default router;

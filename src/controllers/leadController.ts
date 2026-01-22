@@ -9,8 +9,6 @@ import type {
 } from '../types';
 import { assignLeadsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService } from '../service/lead.service';
 import { sendError } from '../utils/sendError';
-import reminder from '../models/reminder';
-import User from '../models/User';
 
 
 
@@ -74,115 +72,7 @@ export const getLeads = async (
 };
 
 
-export const getMyReminders = async (req: Request, res: Response) => {
-  try {
-    // 🔐 Auth safety check
-    if (!req.user || !req.user.userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Unauthorized',
-      });
-    }
 
-    const reminders = await reminder.find({
-      user: req.user.userId,
-      status: 'pending',
-    })
-      .sort({ remindAt: 1 })
-      .lean();
-
-    return res.json({
-      success: true,
-      data: reminders,
-    });
-  } catch (error) {
-    console.error('Get reminders error:', error);
-
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch reminders',
-    });
-  }
-};
-
-
-
-export const genRem = async (req: Request, res: Response) => {
-  console.log("[REMINDER API HIT]");
-  console.log("📥 Request Body:", req.body);
-  console.log("👤 User ID:", req.user?.userId);
-
-  try {
-    const { leadId, title, note, remindAt } = req.body;
-
-    /* =========================
-       BASIC VALIDATION
-    ========================= */
-    if (!leadId || !title || !remindAt) {
-      return res.status(400).json({
-        success: false,
-        message: "leadId, title and remindAt are required"
-      });
-    }
-
-    if (!req.user?.userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized"
-      });
-    }
-
-    /* =========================
-       CHECK USER
-    ========================= */
-    const user = await User.findById(req.user.userId).select("isActive");
-    if (!user || !user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: "User is inactive or not found"
-      });
-    }
-
-    /* =========================
-       CHECK LEAD
-    ========================= */
-    const lead = await Lead.findById(leadId).select("name");
-    if (!lead) {
-      return res.status(404).json({
-        success: false,
-        message: "Lead not found"
-      });
-    }
-
-    /* =========================
-       CREATE REMINDER
-    ========================= */
-    const newReminder = await reminder.create({
-      user: req.user.userId,
-      lead: leadId,
-      title: title.trim(),
-      note: note?.trim(),
-      remindAt: new Date(remindAt),
-      status: "pending"
-    });
-
-    console.log("✅ Reminder created:", newReminder._id);
-
-    return res.status(201).json({
-      success: true,
-      message: "Reminder created successfully",
-      data: newReminder
-    });
-
-  } catch (error: any) {
-    console.error("🔥 CREATE REMINDER ERROR:", error.message);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to create reminder"
-    });
-  }
-};
 
 
 export const getLeadById = async (req: Request, res: Response): Promise<void> => {
