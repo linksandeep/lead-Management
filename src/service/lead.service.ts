@@ -14,7 +14,10 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     throw err;
   }
 
-  console.log(' Total rows received:', rows.length);
+  console.log('📥 Total rows received:', rows.length);
+  
+  // Log headers for debugging
+  console.log('CSV Headers:', Object.keys(rows[0] || {}));
 
   const requiredFields = ['name', 'email', 'phone'];
 
@@ -22,31 +25,81 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
   let updatedCount = 0;
   const duplicateLeads: any[] = [];
 
+  // Simple normalization function if yours isn't working
+  const normalizeRow = (rawRow: any) => {
+    const normalized: any = {};
+    
+    // Convert all keys to lowercase and trim
+    for (const [key, value] of Object.entries(rawRow)) {
+      const normalizedKey = key.toLowerCase().trim();
+      normalized[normalizedKey] = value;
+    }
+    
+    // Also handle common variations
+    if (!normalized.name && normalized['full name']) {
+      normalized.name = normalized['full name'];
+    }
+    if (!normalized.email && normalized['e-mail']) {
+      normalized.email = normalized['e-mail'];
+    }
+    if (!normalized.phone && normalized['mobile']) {
+      normalized.phone = normalized['mobile'];
+    }
+    if (!normalized.phone && normalized['telephone']) {
+      normalized.phone = normalized['telephone'];
+    }
+    if (!normalized.assignedto && normalized['assigned to']) {
+      normalized.assignedto = normalized['assigned to'];
+    }
+    if (!normalized.assignedto && normalized['assigned']) {
+      normalized.assignedto = normalized['assigned'];
+    }
+    
+    return normalized;
+  };
+
   for (let i = 0; i < rows.length; i++) {
     const rawRow = rows[i];
     const rowNumber = i + 2;
 
-    const row = normalizeRowKeys(rawRow);
+    // Use the simple normalization function
+    const row = normalizeRow(rawRow);
+    
+    // Debug logging
+    console.log(`➡️ Processing row ${rowNumber}`);
+    console.log('Normalized row:', row);
 
-    console.log(`➡️ Processing row ${rowNumber}`, row);
-
-    //  Validate required fields
+    //  Validate required fields - check if they exist and have value
+    const missingFields = [];
     for (const field of requiredFields) {
-      if (!row[field] || !row[field].toString().trim()) {
-        const err: any = new Error(
-          `Missing required field "${field}" at row ${rowNumber}`
-        );
-        err.statusCode = 400;
-        throw err;
+      const fieldValue = row[field];
+      if (!fieldValue || fieldValue.toString().trim() === '') {
+        missingFields.push(field);
       }
+    }
+    
+    if (missingFields.length > 0) {
+      console.error(`❌ Missing fields at row ${rowNumber}:`, missingFields);
+      console.error('Row data:', row);
+      
+      // Skip this row and continue with others
+      console.log(`⏭️ Skipping row ${rowNumber} due to missing fields`);
+      continue;
+      
+      // Or throw error if you want to stop the entire import:
+      // const err: any = new Error(
+      //   `Missing required fields "${missingFields.join(', ')}" at row ${rowNumber}`
+      // );
+      // err.statusCode = 400;
+      // throw err;
     }
 
     const name = row.name.trim();
     const email = row.email.toLowerCase().trim();
     const phone = row.phone.toString().trim();
-    const assignedToName = row.assignedto?.trim();
+    const assignedToName = row.assignedto?.trim() || '';
 
-    console.log('👤 assignedToName:', assignedToName || 'EMPTY');
+    console.log('👤 Extracted:', { name, email, phone, assignedToName });
 
     //  Find existing lead
     const existingLead = await Lead.findOne({
@@ -57,22 +110,28 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
 
     //  Resolve assigned user
     let assignedUser = null;
-    if (assignedToName) {
-      assignedUser = await User.findOne({
-        name: new RegExp(`^${assignedToName}$`, 'i')
-      }).select('_id');
+    if (assignedToName && assignedToName !== '') {
+      // Clean up the assignedToName (remove quotes, newlines, etc.)
+      const cleanName = assignedToName.replace(/["'\n\r]/g, '').trim();
+      
+      if (cleanName) {
+        assignedUser = await User.findOne({
+          name: new RegExp(`^${cleanName}$`, 'i')
+        }).select('_id');
 
-      console.log('👥 resolved user:', assignedUser?._id || 'NOT FOUND');
+        console.log('👥 Searching for user:', cleanName);
+        console.log('👥 resolved user:', assignedUser?._id || 'NOT FOUND');
+      }
     }
 
     const assignedUserId = assignedUser?._id
       ? new mongoose.Types.ObjectId(String(assignedUser._id))
       : null;
 
-    console.log('🆔 assignedUserId:', assignedUserId || 'NULL');
+    console.log(' assignedUserId:', assignedUserId || 'NULL');
 
     // ─────────────────────────────────────────────
-    // 🆕 CASE 1: NEW LEAD
+    //  CASE 1: NEW LEAD
     // ─────────────────────────────────────────────
     if (!existingLead) {
       const newLead = await Lead.create({
@@ -108,7 +167,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     //  ADDED: Update folder to "duplicate" for existing lead
     if (existingLead) {
       // Update the existing lead's folder to "duplicate"
-      existingLead.folder = 'Dupicate';
+      existingLead.folder = 'duplicate';
       await existingLead.save();
       console.log('📁 Updated existing lead folder to "duplicate":', existingLead._id);
     }
@@ -117,7 +176,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     // CASE 3: EXISTING LEAD — ALREADY ASSIGNED
     // ─────────────────────────────────────────────
     if (existingLead.assignedTo) {
-      console.log('🔁 Lead already assigned, keeping same user');
+      console.log(' Lead already assigned, keeping same user');
 
       existingLead.assignmentHistory.push({
         assignedTo: existingLead.assignedTo as mongoose.Types.ObjectId,
@@ -132,12 +191,12 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     }
 
     // ─────────────────────────────────────────────
-    // 🆕 CASE 4: EXISTING BUT NOT ASSIGNED → ASSIGN
+    //  CASE 4: EXISTING BUT NOT ASSIGNED → ASSIGN
     // ─────────────────────────────────────────────
     if (!existingLead.assignedTo && assignedUserId) {
-      console.log('🟢 Assigning unassigned lead');
+      console.log(' Assigning unassigned lead');
 
-      // 🔥 IMPORTANT FIX (NO TS ERROR)
+      //  IMPORTANT FIX (NO TS ERROR)
       existingLead.set('assignedTo', assignedUserId);
 
       existingLead.assignmentHistory.push({
@@ -153,7 +212,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     }
 
     // ─────────────────────────────────────────────
-    // 🆕 CASE 5: TRUE DUPLICATE → UPDATE DUPLICATE MODEL
+    // CASE 5: TRUE DUPLICATE → UPDATE DUPLICATE MODEL
     // ─────────────────────────────────────────────
     console.log('⚠️ Duplicate detected');
 
@@ -178,7 +237,15 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
       phone,
       reason
     });
+    
+    updatedCount++;
   }
+
+  console.log(' Import Summary:', {
+    insertedCount,
+    updatedCount,
+    duplicateCount: duplicateLeads.length
+  });
 
   return {
     insertedCount,
@@ -187,8 +254,6 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
     duplicateLeads
   };
 };
-
-
 
 
 
