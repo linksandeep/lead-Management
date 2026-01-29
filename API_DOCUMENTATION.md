@@ -1042,3 +1042,41 @@ All API responses follow this standard format:
 **Generated on**: December 1, 2023  
 **API Version**: 1.0.0  
 **Last Updated**: December 1, 2023
+
+
+
+
+
+
+// 1. Set the date to exactly start of today
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+// 2. These are the ONLY statuses that will stay in their current folder
+const protectedStatuses = [
+  "New", 
+  "Contacted", 
+  "Follow-up", 
+  "Interested", 
+  "Qualified", 
+  "Proposal Sent", 
+  "Negotiating", 
+  "Sales Done"
+];
+
+// 3. The Update
+const result = db.leads.updateMany(
+  {
+    $and: [
+      { "createdAt": { "$lt": today } }, // Older than today
+      { "status": { "$nin": protectedStatuses } }, // NOT one of the protected names
+      { "folder": { "$ne": "oldLeads" } } // Don't update if already moved
+    ]
+  },
+  {
+    $set: { "folder": "oldLeads" }
+  }
+);
+
+print(`Successfully matched ${result.matchedCount} leads.`);
+print(`Successfully updated ${result.modifiedCount} leads to oldLeads folder.`);
