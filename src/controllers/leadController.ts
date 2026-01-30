@@ -22,7 +22,7 @@ export const getLeads = async (
     const limitNum = parseInt((req.query.limit as string) || '10', 10);
 
     // ✅ NEW: If folder is Duplicate → call duplicate service
-    if (req.query.folder === 'Duplicate') {
+    if (req.query.folder === 'Duplicatelll') {
       const { leads, total } = await getDuplicateLeadsService(req);
 
       const totalPages = Math.ceil(total / limitNum);

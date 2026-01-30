@@ -1080,3 +1080,45 @@ const result = db.leads.updateMany(
 
 print(`Successfully matched ${result.matchedCount} leads.`);
 print(`Successfully updated ${result.modifiedCount} leads to oldLeads folder.`);
+
+
+
+
+// 1. Set the cutoff to the start of today
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+// 2. Define the protected statuses
+const protectedStatuses = [
+  "New", 
+  "Contacted", 
+  "Follow-up", 
+  "Interested", 
+  "Qualified", 
+  "Proposal Sent", 
+  "Negotiating", 
+  "Sales Done"
+];
+
+// 3. Execute the update using an aggregation pipeline
+db.leads.updateMany(
+  {
+    $and: [
+      { "createdAt": { "$lt": today } },               // Older than today
+      { "status": { "$nin": protectedStatuses } },     // Not in the protected list
+      { "status": { "$not": /^old_/ } }                // Avoid updating if already prefixed with 'old_'
+    ]
+  },
+  [
+    {
+      $set: {
+        // Keeps the current folder if it was already something else, 
+        // but your requirement specifies folder should be 'oldLeads'
+        "folder": "oldLeads",
+        
+        // Updates status to "old_" + current status (e.g., "Wrong Number" becomes "old_Wrong Number")
+        "status": { $concat: ["old_", "$status"] }
+      }
+    }
+  ]
+);

@@ -443,7 +443,7 @@ export const getLeadsService = async (
       .populate('assignmentHistory.assignedBy', 'name email')
 
       .populate('notes.createdBy', 'name email')
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean(),
@@ -653,7 +653,7 @@ export const getMyLeadsService = async (req: Request) => {
       .populate('notes.createdBy', 'name email')
       .populate('assignmentHistory.assignedTo', 'name email')   //  NEW
       .populate('assignmentHistory.assignedBy', 'name email')   //  NEW
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean(),
