@@ -52,7 +52,10 @@ export interface ILead extends Document {
   source: LeadSource;
   status: LeadStatus;
   priority: LeadPriority;
-
+  campaignName?: string;  // Added
+  adsetName?: string;     // Added
+  adName?: string;        // Added
+  metaLeadId?: string;
   assignedTo?: mongoose.Types.ObjectId;
   assignedBy?: mongoose.Types.ObjectId;
 
@@ -100,8 +103,13 @@ export interface CreateLeadInput {
   position?: string;
   folder?: string;
   source: LeadSource;
+
   priority: LeadPriority;
   notes?: string;
+  campaignName?: string;
+  adsetName?: string;
+  adName?: string;
+  metaLeadId?: string;
 }
 
 export interface UpdateLeadInput {

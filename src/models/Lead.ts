@@ -67,6 +67,30 @@ const leadSchema = new Schema<ILead>({
     required: [true, 'Source is required'],
     default: 'Manual'
   },
+  campaignName: {
+    type: String,
+    trim: true,
+    required: false,
+    default: ''
+  },
+  adsetName: {
+    type: String,
+    trim: true,
+    required: false,
+    default: ''
+  },
+  adName: {
+    type: String,
+    trim: true,
+    required: false,
+    default: ''
+  },
+  metaLeadId: {
+    type: String,
+    trim: true,
+    required: false,
+    default: ''
+  },
     status: {
       type: String,
       default: 'New',
