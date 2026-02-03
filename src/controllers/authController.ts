@@ -221,17 +221,7 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const { name } = req.body;
-
-    // Validate input
-    if (!name || name.trim().length < 2) {
-      res.status(400).json({
-        success: false,
-        message: 'Invalid name',
-        errors: ['Name must be at least 2 characters long']
-      });
-      return;
-    }
+    const { name, phone } = req.body;
 
     const user = await User.findById(req.user.userId);
     if (!user) {
@@ -242,14 +232,46 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Update user
-    user.name = name.trim();
+    // --- 1. Update Name (Optional) ---
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length < 2) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid name',
+          errors: ['Name must be at least 2 characters long']
+        });
+        return;
+      }
+      user.name = name.trim();
+    }
+
+    // --- 2. Update Phone (Optional) ---
+    if (phone !== undefined) {
+      if (typeof phone !== 'string' || phone.trim().length < 9) {
+        res.status(400).json({
+          success: false,
+          message: 'Invalid phone number',
+          errors: ['Phone number must be at least 9 characters long']
+        });
+        return;
+      }
+      user.phone = phone.trim();
+    }
+
+    // --- 3. Save Changes ---
     await user.save();
+
+    // --- 4. Handle Response & Fix TS(2590) ---
+    // Convert to plain object and cast to 'any' to bypass complex union types
+    const userResponse = user.toObject() as any;
+    
+    // Security: Remove sensitive fields before sending to client
+    delete userResponse.password;
 
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      data: user
+      data: userResponse
     });
   } catch (error) {
     console.error('Update profile error:', error);

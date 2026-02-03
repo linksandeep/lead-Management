@@ -14,7 +14,6 @@ import {
   errorHandler, 
   notFoundHandler, 
   createRateLimiter, 
-  corsOptions,
   requestLogger,
   bodyParserErrorHandler,
   securityHeaders,

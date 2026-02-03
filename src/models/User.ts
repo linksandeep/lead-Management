@@ -39,7 +39,12 @@ const userSchema = new Schema<IUser>({
   },
   lastLogin: {
     type: Date
-  }
+  },
+  phone: {
+    type: String,
+    required: false
+  },
+  
 }, {
   timestamps: true,
   toJSON: {

@@ -3,7 +3,6 @@ import Lead from '../models/Lead';
 import DuplicateLead from '../models/DuplicateLead';
 import User from '../models/User';
 import { getCsvFromGoogleSheet } from '../utils/googleSheet';
-import { normalizeRowKeys } from '../utils/sheetUtils';
 
 export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
   const rows = await getCsvFromGoogleSheet(sheetUrl);
@@ -257,7 +256,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
 
 
 
-import type { AssignLeadInput, ILead } from '../types';
+import type { AssignLeadInput } from '../types';
 
 export const assignLeadsService = async (
   input: AssignLeadInput,
@@ -338,8 +337,6 @@ export const getLeadsService = async (
     priority,
     assignedTo,
     folder,
-    search,
-    dateRange
   } = req.query;
 
   const pageNum = parseInt(page as string, 10);

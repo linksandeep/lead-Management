@@ -21,6 +21,7 @@ export interface IAssignmentHistory {
 export interface IUser extends Document {
   name: string;
   email: string;
+  phone: string;
   password: string;
   role: 'admin' | 'user';
   isActive: boolean;

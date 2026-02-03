@@ -167,8 +167,10 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
 
 export const updateUser = async (req: Request, res: Response): Promise<void> => {
   try {
+
+    console.log("this is we are using for numebr ")
     const { id } = req.params;
-    const { name, role, isActive } = req.body;
+    const { name, role, isActive, phone } = req.body;
 
     const user = await User.findById(id);
     if (!user) {
@@ -179,7 +181,7 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Prevent users from modifying their own role or active status
+    // --- 1. PERMISSION CHECKS ---
     if (req.user?.userId === id) {
       if (role !== undefined && role !== user.role) {
         res.status(400).json({
@@ -200,19 +202,37 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       }
     }
 
-    // Update fields
-    if (name !== undefined) {
-      if (!name || name.trim().length < 2) {
-        res.status(400).json({
-          success: false,
-          message: 'Invalid name',
-          errors: ['Name must be at least 2 characters long']
-        });
-        return;
-      }
-      user.name = name.trim();
-    }
+    // --- 2. FIELD UPDATES WITH PROPER VALIDATION ---
 
+    // Name Update
+  if (name !== undefined) {
+    // Check if it's a string and has content after trimming
+    if (typeof name !== 'string' || name.trim().length < 2) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid name',
+        errors: ['Name must be a string at least 2 characters long']
+      });
+      return;
+    }
+    user.name = name.trim();
+  }
+
+  // Phone Update
+  if (phone !== undefined) {
+    // Check if it's a string and has content
+    if (typeof phone !== 'string' || phone.trim().length < 9) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid number',
+        errors: ['Number must be at least 9 characters long']
+      });
+      return;
+    }
+    user.phone = phone.trim();
+  }
+
+    // Role Update
     if (role !== undefined) {
       if (!['admin', 'user'].includes(role)) {
         res.status(400).json({
@@ -225,10 +245,12 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       user.role = role;
     }
 
+    // Active Status Update
     if (isActive !== undefined) {
       user.isActive = Boolean(isActive);
     }
 
+    // --- 3. SAVE & RESPONSE ---
     await user.save();
 
     res.status(200).json({
@@ -236,6 +258,7 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       message: 'User updated successfully',
       data: user
     });
+
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({
@@ -245,6 +268,8 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
     });
   }
 };
+
+
 
 export const deleteUser = async (req: Request, res: Response): Promise<void> => {
   try {
