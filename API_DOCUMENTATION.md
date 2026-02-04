@@ -2,7 +2,7 @@
 
 ## Base URL
 ```
-http://localhost:8000/api
+https://api.leads.edtechinformative.uk/api
 ```
 
 ## Authentication
