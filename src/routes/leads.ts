@@ -15,6 +15,7 @@ import {
   getFolderCounts,
   importLeadsFromGoogleSheet,
   getDuplicateAndUncategorizedCounts,
+  searchLeads,
 
 } from '../controllers/leadController';
 import { 
@@ -102,6 +103,8 @@ router.post(
 /* =============== LEAD CRUD =============== */
 // Get all leads (filtered by role)
 router.get('/', getLeads);
+
+router.get('/search',searchLeads)
 
 // Get single lead by ID
 router.get('/:id', getLeadById);

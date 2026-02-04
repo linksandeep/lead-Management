@@ -7,7 +7,7 @@ import type {
   AssignLeadInput, 
   AddNoteInput
 } from '../types';
-import { assignLeadsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService } from '../service/lead.service';
+import { assignLeadsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService, searchLeadsService } from '../service/lead.service';
 import { sendError } from '../utils/sendError';
 
 
@@ -73,6 +73,32 @@ export const getLeads = async (
   }
 };
 
+
+export const searchLeads = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { leads, total } = await searchLeadsService(req);
+
+    res.status(200).json({
+      success: true,
+      message: 'Leads searched successfully',
+      data: leads,
+      total
+    });
+  } catch (error) {
+    console.error('Search leads error:', error);
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to search leads',
+      errors: [
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      ]
+    });
+  }
+};
 
 
 

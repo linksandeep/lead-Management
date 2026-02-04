@@ -339,6 +339,9 @@ export const getLeadsService = async (
     assignedTo,
     folder,
 
+    //SEARCH (ADDED)
+    search,
+
     // NEW (optional)
     date,
     fromDate,
@@ -433,7 +436,22 @@ export const getLeadsService = async (
     }
   }
 
-  // ---------------- ✅ NEW DATE FILTER (ONLY ADDITION) ----------------
+  // ---------------- 🔍 SEARCH (ONLY ADDITION) ----------------
+  if (search && typeof search === 'string') {
+    const searchText = search.trim();
+
+    filter.$or = [
+      { name: { $regex: searchText, $options: 'i' } },
+      { email: { $regex: searchText, $options: 'i' } },
+      {
+        $expr: {
+          $eq: [{ $toString: '$phone' }, searchText]
+        }
+      }
+    ];
+  }
+
+  // ---------------- DATE FILTER (UNCHANGED) ----------------
   if (date) {
     const start = new Date(date as string);
     start.setHours(0, 0, 0, 0);
@@ -456,7 +474,7 @@ export const getLeadsService = async (
     }
   }
 
-  // ---------------- QUERY (FAST) ----------------
+  // ---------------- QUERY (UNCHANGED) ----------------
   const [rawLeads, total] = await Promise.all([
     Lead.find(filter)
       .populate('assignedToUser', 'name email')
@@ -467,11 +485,10 @@ export const getLeadsService = async (
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
-      .lean(), // 🚀 faster response
+      .lean(),
     Lead.countDocuments(filter)
   ]);
 
-  // ---------------- ENRICH (UNCHANGED) ----------------
   const leads = rawLeads.map((lead: any) => {
     const historyCount = lead.assignmentHistory?.length || 0;
 
@@ -488,6 +505,7 @@ export const getLeadsService = async (
 
   return { leads, total };
 };
+
 
 
 
@@ -696,3 +714,76 @@ export const getMyLeadsService = async (req: Request) => {
     limit: limitNum
   };
 };
+
+
+
+
+interface SearchLeadsResult {
+  leads: any[];
+  total: number;
+}
+
+export const searchLeadsService = async (
+  req: Request
+): Promise<SearchLeadsResult> => {
+  const { q } = req.query;
+
+  if (!q || typeof q !== 'string') {
+    return { leads: [], total: 0 };
+  }
+
+  const searchText = q.trim();
+  const normalizedPhone = searchText.replace(/\D/g, '');
+
+  const filter: any = {};
+
+  /* =======================
+     ROLE BASED ACCESS (RBC)
+  ======================= */
+  if (req.user?.role !== 'admin') {
+    filter.assignedTo = req.user?.userId;
+  }
+
+  /* =======================
+     SEARCH CONDITIONS
+  ======================= */
+  const orConditions: any[] = [
+    { name: { $regex: searchText, $options: 'i' } },
+    { email: { $regex: searchText, $options: 'i' } }
+  ];
+
+  // ✅ Phone search (number-safe)
+  if (normalizedPhone.length >= 4) {
+    // exact match (FAST)
+    orConditions.push({ phone: Number(normalizedPhone) });
+  }
+
+  filter.$or = orConditions;
+
+  const [rawLeads, total] = await Promise.all([
+    Lead.find(filter)
+      .populate('assignedToUser', 'name email')
+      .populate('assignedByUser', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean(),
+    Lead.countDocuments(filter)
+  ]);
+
+  const leads = rawLeads.map((lead: any) => {
+    const historyCount = lead.assignmentHistory?.length || 0;
+
+    return {
+      ...lead,
+      assignmentCount: historyCount,
+      wasAssignedInPast: historyCount > 1,
+      lastAssignedAt:
+        historyCount > 0
+          ? lead.assignmentHistory[historyCount - 1].assignedAt
+          : null
+    };
+  });
+
+  return { leads, total };
+};
+
