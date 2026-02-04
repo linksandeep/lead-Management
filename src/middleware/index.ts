@@ -181,6 +181,9 @@ export const corsOptions: CorsOptions = {
     if (process.env.FRONTEND_URL) {
       allowedOrigins.push(process.env.FRONTEND_URL);
     }
+     if (process.env.FRONTEND_URL_WWW) {
+      allowedOrigins.push(process.env.FRONTEND_URL_WWW);
+    } 
 
     if (process.env.NODE_ENV === 'development') {
       // In development, allow all origins

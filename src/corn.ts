@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import reminder from './models/reminder';
 import { io } from './server';
-import User from './models/User';
 
 const shouldRunCron =
   !process.env.NODE_APP_INSTANCE ||
