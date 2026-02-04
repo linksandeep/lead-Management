@@ -18,10 +18,12 @@ export const getLeads = async (
   res: Response
 ): Promise<void> => {
   try {
+
+    console.log("we are in foder api")
     const pageNum = parseInt((req.query.page as string) || '1', 10);
     const limitNum = parseInt((req.query.limit as string) || '10', 10);
 
-    // ✅ NEW: If folder is Duplicate → call duplicate service
+    //  Duplicate folder flow (UNCHANGED)
     if (req.query.folder === 'Duplicatelll') {
       const { leads, total } = await getDuplicateLeadsService(req);
 
@@ -41,7 +43,7 @@ export const getLeads = async (
       return;
     }
 
-    // Existing flow (UNCHANGED)
+    // Normal leads flow (UNCHANGED)
     const { leads, total } = await getLeadsService(req);
     const totalPages = Math.ceil(total / limitNum);
 
@@ -70,6 +72,7 @@ export const getLeads = async (
     });
   }
 };
+
 
 
 

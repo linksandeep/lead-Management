@@ -138,6 +138,7 @@ export const importLeadsFromGoogleSheetService = async (sheetUrl: string) => {
         email,
         phone,
         position: row.position || '',
+        folder:"By Sheet",
         source: 'Import',
         status: 'New',
         priority: 'Medium',
@@ -337,6 +338,11 @@ export const getLeadsService = async (
     priority,
     assignedTo,
     folder,
+
+    // NEW (optional)
+    date,
+    fromDate,
+    toDate
   } = req.query;
 
   const pageNum = parseInt(page as string, 10);
@@ -345,7 +351,7 @@ export const getLeadsService = async (
 
   const filter: any = {};
 
-  // Role-based access
+  // ---------------- ROLE BASED ACCESS (UNCHANGED) ----------------
   if (req.user?.role !== 'admin') {
     filter.assignedTo = req.user?.userId;
   }
@@ -427,27 +433,45 @@ export const getLeadsService = async (
     }
   }
 
-  // Search & dateRange logic UNCHANGED (kept as-is)
-  // ----------------------------------------------------------------
+  // ---------------- ✅ NEW DATE FILTER (ONLY ADDITION) ----------------
+  if (date) {
+    const start = new Date(date as string);
+    start.setHours(0, 0, 0, 0);
 
+    const end = new Date(date as string);
+    end.setHours(23, 59, 59, 999);
+
+    filter.createdAt = { $gte: start, $lte: end };
+  } else if (fromDate || toDate) {
+    filter.createdAt = {};
+
+    if (fromDate) {
+      filter.createdAt.$gte = new Date(fromDate as string);
+    }
+
+    if (toDate) {
+      const end = new Date(toDate as string);
+      end.setHours(23, 59, 59, 999);
+      filter.createdAt.$lte = end;
+    }
+  }
+
+  // ---------------- QUERY (FAST) ----------------
   const [rawLeads, total] = await Promise.all([
     Lead.find(filter)
       .populate('assignedToUser', 'name email')
       .populate('assignedByUser', 'name email')
-
-      //  NEW: populate assignment history
       .populate('assignmentHistory.assignedTo', 'name email')
       .populate('assignmentHistory.assignedBy', 'name email')
-
       .populate('notes.createdBy', 'name email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
-      .lean(),
+      .lean(), // 🚀 faster response
     Lead.countDocuments(filter)
   ]);
 
-  //  NEW: enrich leads with UI-friendly flags
+  // ---------------- ENRICH (UNCHANGED) ----------------
   const leads = rawLeads.map((lead: any) => {
     const historyCount = lead.assignmentHistory?.length || 0;
 
@@ -464,6 +488,7 @@ export const getLeadsService = async (
 
   return { leads, total };
 };
+
 
 
 import { FilterQuery } from 'mongoose';
