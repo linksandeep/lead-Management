@@ -14,24 +14,25 @@ export const getMyReminders = async (req: Request, res: Response) => {
       });
     }
 
-    //  Use the correct model name
     const reminders = await Reminder.find({
-        user: req.user.userId,
-        action: { $ne: 'done' }
-      })
-        .sort({ remindAt: 1 })
-        .lean();
-      
+      user: req.user.userId,
+      action: { $ne: 'done' },
+    })
+      .populate('lead', 'name email phone')   //  POPULATE LEAD
+      .populate('user', 'name email')         //  optional but useful
+      .sort({ remindAt: 1 })
+      .lean();
+
     return res.json({
       success: true,
       data: reminders,
     });
   } catch (error) {
     console.error('Get reminders error:', error);
-    // Use your error utility
     return sendError(res, error, 500);
   }
 };
+
 
 export const deleteReminder = async (req: Request, res: Response) => {
   try {
