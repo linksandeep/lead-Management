@@ -7,7 +7,7 @@ import type {
   AssignLeadInput, 
   AddNoteInput
 } from '../types';
-import { assignLeadsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService, searchLeadsService } from '../service/lead.service';
+import { assignLeadsService, getAllChatsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService, searchLeadsService } from '../service/lead.service';
 import { sendError } from '../utils/sendError';
 
 
@@ -802,6 +802,47 @@ export const getDuplicateAndUncategorizedCounts = async (
           ? error.message
           : 'Unknown error occurred'
       ]
+    });
+  }
+};
+
+
+
+
+export const getAllChats = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    // RBAC Check: Ensure only admins can access all chats
+    if (req.user?.role !== 'admin') {
+      res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.',
+      });
+      return;
+    }
+
+    const result = await getAllChatsService(req);
+    const totalPages = Math.ceil(result.total / result.limit);
+
+    res.status(200).json({
+      success: true,
+      message: 'All user chats retrieved successfully',
+      data: result.chats,
+      pagination: {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+        totalPages
+      }
+    });
+  } catch (error) {
+    console.error('Get all chats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve chat history',
+      errors: [error instanceof Error ? error.message : 'Unknown error occurred']
     });
   }
 };

@@ -510,6 +510,7 @@ export const getLeadsService = async (
 
 
 import { FilterQuery } from 'mongoose';
+import { Chat } from '../models/chat';
 
 interface GetDuplicateLeadsResult {
   leads: any[];
@@ -787,3 +788,57 @@ export const searchLeadsService = async (
   return { leads, total };
 };
 
+
+export const getAllChatsService = async (req: Request) => {
+  const {
+    page = 1,
+    limit = 50,
+    phone,
+    platform,
+    search
+  } = req.query;
+
+  const pageNum = parseInt(page as string, 10);
+  const limitNum = parseInt(limit as string, 10);
+  const skip = (pageNum - 1) * limitNum;
+
+  // Initialize filter (Admin sees everything, so filter starts empty)
+  const filter: any = {};
+
+  // Filter by specific phone number
+  if (phone) {
+    filter.phone = phone;
+  }
+
+  // Filter by platform (whatsapp, web, etc.)
+  if (platform) {
+    filter['metadata.platform'] = platform;
+  }
+
+  // Search within the message content or username
+  if (search) {
+    const regex = new RegExp(search as string, 'i');
+    filter.$or = [
+      { content: regex },
+      { userName: regex },
+      { phone: regex }
+    ];
+  }
+
+  /* ---------- QUERY ---------- */
+  const [chats, total] = await Promise.all([
+    Chat.find(filter)
+      .sort({ timestamp: -1 }) // Newest messages first
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    Chat.countDocuments(filter)
+  ]);
+
+  return {
+    chats,
+    total,
+    page: pageNum,
+    limit: limitNum
+  };
+};
