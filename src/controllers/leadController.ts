@@ -708,55 +708,172 @@ export const getMyLeadsStats = async (req: Request, res: Response): Promise<void
 };
 
 // Get folder counts for leads (optimized for performance)
-export const getFolderCounts = async (req: Request, res: Response): Promise<void> => {
-  try {
-    // Build filter based on user role
-    const baseFilter: any = {};
-    
-    // If user is not admin, only count their assigned leads
-    if (req.user?.role !== 'admin') {
-      baseFilter.assignedTo = req.user?.userId;
-    }
+// Get folder and status counts for leads (Optimized)
 
-    // Use aggregation pipeline for efficient counting
-    const folderCounts = await Lead.aggregate([
-      { $match: baseFilter },
+
+
+// Change return type to Promise<any> to allow returning the sendError response
+
+
+
+
+export const getFolderCounts = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return sendError(res, { message: 'User not authenticated' }, 401);
+
+    const userObjectId = new mongoose.Types.ObjectId(userId as string);
+
+    const statsData = await Lead.aggregate([
+      { $match: { assignedTo: userObjectId } },
       {
-        $group: {
-          _id: {
-            $cond: [
-              { $or: [{ $eq: ['$folder', ''] }, { $eq: ['$folder', null] }, { $not: ['$folder'] }] },
-              'Uncategorized',
-              '$folder'
-            ]
-          },
-          count: { $sum: 1 }
+        $facet: {
+          // Count every single lead assigned to this user
+          totalLeads: [{ $count: "count" }],
+          // Group by folder as usual
+          folderCounts: [
+            {
+              $group: {
+                _id: "$folder",
+                count: { $sum: 1 }
+              }
+            }
+          ],
+          statusCounts: [
+            {
+              $group: {
+                _id: { $ifNull: ['$status', 'Unknown'] },
+                count: { $sum: 1 }
+              }
+            }
+          ]
         }
-      },
-      { $sort: { '_id': 1 } }
+      }
     ]);
 
-    // Convert to object format
-    const folderStats: Record<string, number> = {};
-    folderCounts.forEach(item => {
-      folderStats[item._id] = item.count;
+    const result = {
+      folderStats: {} as Record<string, number>,
+      statusStats: {} as Record<string, number>
+    };
+
+    if (statsData[0]) {
+      // 1. Process standard folders (exclude empty/null from the main list if you want)
+      statsData[0].folderCounts.forEach((item: any) => {
+        if (item._id && item._id !== "") {
+          result.folderStats[item._id] = item.count;
+        }
+      });
+
+      // 2. Set "Uncategorized" to the TOTAL count of all leads
+      const totalCount = statsData[0].totalLeads[0]?.count || 0;
+      result.folderStats['Uncategorized'] = totalCount;
+
+      // 3. Process Statuses
+      statsData[0].statusCounts.forEach((item: any) => {
+        result.statusStats[item._id] = item.count;
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Lead statistics retrieved successfully',
+      data: result
     });
 
-    res.status(200).json({
-      success: true,
-      message: 'Folder counts retrieved successfully',
-      data: folderStats
-    });
   } catch (error) {
-    console.error('Get folder counts error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve folder counts',
-      errors: [error instanceof Error ? error.message : 'Unknown error occurred']
-    });
+    console.error('Get stats error:', error);
+    return sendError(res, error, 500);
   }
 };
 
+
+;
+
+
+
+
+
+export const getFolderCountsForAdmin = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = req.user?.userId;
+    const userRole = req.user?.role;
+
+    if (!userId) return sendError(res, { message: 'User not authenticated' }, 401);
+
+    // 1. Build the filter based on Role
+    let baseFilter: any = {};
+
+    if (userRole !== 'admin') {
+      // If NOT admin, strictly filter by their ID
+      const userObjectId = new mongoose.Types.ObjectId(userId as string);
+      baseFilter = { 
+        $or: [
+          { assignedTo: userObjectId },
+          { assignedTo: String(userId) }
+        ]
+      };
+    } 
+    // If user IS admin, baseFilter remains {}, which matches ALL leads in the DB
+
+    const statsData = await Lead.aggregate([
+      { $match: baseFilter }, // Filter applied here
+      {
+        $facet: {
+          totalLeads: [{ $count: "count" }],
+          folderCounts: [
+            {
+              $group: {
+                _id: "$folder",
+                count: { $sum: 1 }
+              }
+            }
+          ],
+          statusCounts: [
+            {
+              $group: {
+                _id: { $ifNull: ['$status', 'Unknown'] },
+                count: { $sum: 1 }
+              }
+            }
+          ]
+        }
+      }
+    ]);
+
+    const result = {
+      folderStats: {} as Record<string, number>,
+      statusStats: {} as Record<string, number>
+    };
+
+    if (statsData[0]) {
+      // Process Folders
+      statsData[0].folderCounts.forEach((item: any) => {
+        if (item._id && String(item._id).trim() !== "") {
+          result.folderStats[item._id] = item.count;
+        }
+      });
+
+      // Set "Uncategorized" as the TOTAL count
+      const totalCount = statsData[0].totalLeads[0]?.count || 0;
+      result.folderStats['Uncategorized'] = totalCount;
+
+      // Process Statuses
+      statsData[0].statusCounts.forEach((item: any) => {
+        result.statusStats[item._id] = item.count;
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Lead statistics retrieved successfully',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('Get stats error:', error);
+    return sendError(res, error, 500);
+  }
+};
 
 export const importLeadsFromGoogleSheet = async (
   req: Request,
