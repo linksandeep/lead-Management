@@ -18,7 +18,8 @@ const defaultStatuses = [
   { name: 'DNP', isDefault: true, order: 8 },
   { name: 'Not Interested', isDefault: true, order: 9 },
   { name: 'Wrong Number', isDefault: true, order: 10 },
-  { name: 'Call Back', isDefault: true, order: 11 }
+  { name: 'Call Back', isDefault: true, order: 11 },
+  {name :"Didn't Require", isDefault:true,order:12}
 ];
 
 async function seedStatuses() {
