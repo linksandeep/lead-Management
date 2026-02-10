@@ -46,6 +46,8 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
    */
   export const clockOut = async (req: Request, res: Response): Promise<void> => {
     try {
+      //  Provide defaults to avoid "Cannot destructure property" error
+      const { lat = 0, lng = 0 } = req.body || {}; 
       const userId = req.user?.userId;
   
       if (!userId) {
@@ -53,7 +55,8 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
         return;
       }
   
-      const data = await AttendanceService.clockOut(userId.toString());
+      // The service will decide if these coordinates matter based on WFH status
+      const data = await AttendanceService.clockOut(userId.toString(), lat, lng);
   
       res.status(200).json({
         success: true,
@@ -61,11 +64,9 @@ export const clockIn = async (req: Request, res: Response): Promise<void> => {
         data
       });
     } catch (error: any) {
-      console.error('Clock-out error:', error);
       sendError(res, error, 400);
     }
   };
-  
   /**
    * Get Current Status for UI State & Lockdown
    */

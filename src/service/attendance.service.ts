@@ -4,8 +4,8 @@ import User from '../models/User';
 
 // Configuration - Move these to your .env or a Settings model later
 const COMPANY_LOCATION = {
-  lat: 228.601220960871636, // Replace with your company latitude
-  lng: 277.43365336008797 // Replace with your company longitude
+  lat: 28.601220960871636, // Replace with your company latitude
+  lng: 77.43365336008797 // Replace with your company longitude
 };
 const ALLOWED_RADIUS_METERS = 200; 
 
@@ -82,11 +82,31 @@ export const AttendanceService = {
 
   /**
    * Process Clock-Out and Finalize Hours
+   * /**
+   * Process Clock-Out with Geofencing and WFH Bypass
    */
-  clockOut: async (userId: string): Promise<IAttendance> => {
+  clockOut: async (userId: string, lat: number, lng: number): Promise<IAttendance> => {
+    // 1. Fetch user to check WFH permissions
+    const user = await User.findById(userId);
+    if (!user) throw new Error('User not found');
+
+    // 2. Geofencing check: Only enforce if WFH is NOT allowed
+    if (!user.canWorkFromHome) {
+      // Use your existing calculateDistance logic
+      const distance = AttendanceService.calculateDistance(
+        lat, lng, 
+        COMPANY_LOCATION.lat, COMPANY_LOCATION.lng
+      );
+
+      // Enforce the 200m office radius
+      if (distance > ALLOWED_RADIUS_METERS) {
+        throw new Error(`Location restricted. You must be at the office to clock out. You are ${Math.round(distance)}m away.`);
+      }
+    }
+
     const today = new Date().toISOString().split('T')[0];
 
-    // Find the record where checkOut is null (active session)
+    // 3. Find the active session for today (where checkOut is null)
     const record = await Attendance.findOne({ 
       user: userId, 
       date: today, 
@@ -97,15 +117,18 @@ export const AttendanceService = {
       throw new Error('No active clock-in session found for today.');
     }
 
+    // 4. Update the record with current time
     record.checkOut = new Date();
     
-    // Calculate total hours worked
+    // 5. Calculate total hours worked
     const diffInMs = record.checkOut.getTime() - record.checkIn.getTime();
     const hours = diffInMs / (1000 * 60 * 60);
     record.workHours = parseFloat(hours.toFixed(2));
 
     return await record.save();
   },
+
+
 
   /**
    * Get Paginated History
