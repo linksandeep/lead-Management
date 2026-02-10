@@ -17,6 +17,7 @@ import {
   getDuplicateAndUncategorizedCounts,
   searchLeads,
   getFolderCountsForAdmin,
+  getAdminLeadStats,
 
 } from '../controllers/leadController';
 import { 
@@ -39,6 +40,8 @@ router.use(authenticateToken, requireAuth);
 
 /* =============== LEAD FILTER & USER ROUTES =============== */
 // My leads endpoint (for users to see their assigned leads)
+router.get('/admin-stats',requireAdmin, getAdminLeadStats);
+
 router.get('/my-leads', getMyLeads);
 
 // My leads stats endpoint
@@ -121,5 +124,4 @@ router.delete('/:id', requireAdmin, deleteLead);
 
 // Summary counters
 router.get('/counts/summary', getDuplicateAndUncategorizedCounts);
-
 export default router;

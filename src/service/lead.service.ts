@@ -842,3 +842,90 @@ export const getAllChatsService = async (req: Request) => {
     limit: limitNum
   };
 };
+
+
+
+import moment from 'moment';
+
+export const getAdminLeadStatsService = async (query: any) => {
+  const { startDate, endDate, period = 'day' } = query;
+
+  // 1. Define Date Range
+  const start = startDate ? new Date(startDate as string) : moment().startOf('month').toDate();
+  const end = endDate ? new Date(endDate as string) : new Date();
+
+  // 2. Base Filter
+  const matchFilter = {
+    createdAt: { $gte: start, $lte: end }
+  };
+
+  // 3. Overall Counts (Today, Week, Month, Year)
+  const [counts] = await Lead.aggregate([
+    {
+      $facet: {
+        today: [
+          { $match: { createdAt: { $gte: moment().startOf('day').toDate() } } },
+          { $count: 'count' }
+        ],
+        thisWeek: [
+          { $match: { createdAt: { $gte: moment().startOf('week').toDate() } } },
+          { $count: 'count' }
+        ],
+        thisMonth: [
+          { $match: { createdAt: { $gte: moment().startOf('month').toDate() } } },
+          { $count: 'count' }
+        ],
+        thisYear: [
+          { $match: { createdAt: { $gte: moment().startOf('year').toDate() } } },
+          { $count: 'count' }
+        ],
+        totalInRange: [
+          { $match: matchFilter },
+          { $count: 'count' }
+        ]
+      }
+    }
+  ]);
+
+  // 4. Time-based Breakdown (The trend logic)
+  let groupingId: any = {};
+  if (period === 'month') {
+    groupingId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } };
+  } else if (period === 'week') {
+    groupingId = { year: { $year: '$createdAt' }, week: { $week: '$createdAt' } };
+  } else {
+    groupingId = { year: { $year: '$createdAt' }, month: { $month: '$createdAt' }, day: { $dayOfMonth: '$createdAt' } };
+  }
+
+  const trend = await Lead.aggregate([
+    { $match: matchFilter },
+    {
+      $group: {
+        _id: groupingId,
+        count: { $sum: 1 },
+        date: { $first: '$createdAt' }
+      }
+    },
+    { $sort: { 'date': 1 } },
+    {
+      $project: {
+        _id: 0,
+        count: 1,
+        periodLabel: period === 'week' ? { $concat: ["Week ", { $toString: "$_id.week" }] } : "$date",
+        // This gives you the readable range like "1 Jan 2024"
+        formattedDate: { $dateToString: { format: "%d %b %Y", date: "$date" } }
+      }
+    }
+  ]);
+
+  return {
+    summary: {
+      today: counts.today[0]?.count || 0,
+      thisWeek: counts.thisWeek[0]?.count || 0,
+      thisMonth: counts.thisMonth[0]?.count || 0,
+      thisYear: counts.thisYear[0]?.count || 0,
+      totalInRange: counts.totalInRange[0]?.count || 0
+    },
+    trend
+  };
+};

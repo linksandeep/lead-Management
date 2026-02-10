@@ -7,7 +7,7 @@ import type {
   AssignLeadInput, 
   AddNoteInput
 } from '../types';
-import { assignLeadsService, getAllChatsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService, searchLeadsService } from '../service/lead.service';
+import { assignLeadsService, getAdminLeadStatsService, getAllChatsService, getDuplicateAndUncategorizedCountService, getDuplicateLeadsService, getLeadsService, getMyLeadsService, importLeadsFromGoogleSheetService, searchLeadsService } from '../service/lead.service';
 import { sendError } from '../utils/sendError';
 
 
@@ -959,6 +959,32 @@ export const getAllChats = async (
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve chat history',
+      errors: [error instanceof Error ? error.message : 'Unknown error occurred']
+    });
+  }
+};
+
+
+export const getAdminLeadStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Only Admin can see global lead influx
+    if (req.user?.role !== 'admin') {
+      res.status(403).json({ success: false, message: 'Admin access required' });
+      return;
+    }
+
+    const stats = await getAdminLeadStatsService(req.query);
+
+    res.status(200).json({
+      success: true,
+      message: 'Admin lead statistics retrieved successfully',
+      data: stats
+    });
+  } catch (error) {
+    console.error('Admin stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve stats',
       errors: [error instanceof Error ? error.message : 'Unknown error occurred']
     });
   }
