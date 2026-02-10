@@ -1,69 +1,97 @@
 import { Request, Response } from 'express';
 import { AttendanceService } from '../service/attendance.service';
 import { sendError } from '../utils/sendError';
+import { Attendance } from '../models/attendance.model';
 
 /**
  * Handle User Clock-In
  * Validates location and creates an attendance record
  */
-export const clockIn = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { lat, lng } = req.body;
-    const userId = req.user?.userId;
-
-    if (!userId) {
-      res.status(401).json({ success: false, message: 'User not authenticated' });
-      return;
-    }
-
-    if (lat === undefined || lng === undefined) {
-      res.status(400).json({
-        success: false,
-        message: 'Location data is required',
-        errors: ['Latitude and Longitude must be provided']
-      });
-      return;
-    }
-
-    const data = await AttendanceService.clockIn(userId.toString(), lat, lng);
-
-    res.status(201).json({
-      success: true,
-      message: 'Clocked in successfully',
-      data
-    });
-  } catch (error: any) {
-    console.error('Clock-in error:', error);
-    // Use your utility for consistent error handling
-    sendError(res, error, 400);
-  }
-};
-
 /**
- * Handle User Clock-Out
- * Updates record with time and calculates total work hours
+ * Handle User Clock-In
  */
-export const clockOut = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = req.user?.userId;
-
-    if (!userId) {
-      res.status(401).json({ success: false, message: 'User not authenticated' });
-      return;
+export const clockIn = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { lat, lng } = req.body;
+      const userId = req.user?.userId;
+  
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'User not authenticated' });
+        return;
+      }
+  
+      if (lat === undefined || lng === undefined) {
+        res.status(400).json({
+          success: false,
+          message: 'Location data is required'
+        });
+        return;
+      }
+  
+      const data = await AttendanceService.clockIn(userId.toString(), lat, lng);
+  
+      res.status(201).json({
+        success: true,
+        message: 'Clocked in successfully',
+        data
+      });
+    } catch (error: any) {
+      console.error('Clock-in error:', error);
+      sendError(res, error, 400);
     }
-
-    const data = await AttendanceService.clockOut(userId.toString());
-
-    res.status(200).json({
-      success: true,
-      message: 'Clocked out successfully',
-      data
-    });
-  } catch (error: any) {
-    console.error('Clock-out error:', error);
-    sendError(res, error, 400);
-  }
-};
+  };
+  
+  /**
+   * Handle User Clock-Out
+   */
+  export const clockOut = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+  
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'User not authenticated' });
+        return;
+      }
+  
+      const data = await AttendanceService.clockOut(userId.toString());
+  
+      res.status(200).json({
+        success: true,
+        message: 'Clocked out successfully',
+        data
+      });
+    } catch (error: any) {
+      console.error('Clock-out error:', error);
+      sendError(res, error, 400);
+    }
+  };
+  
+  /**
+   * Get Current Status for UI State & Lockdown
+   */
+  export const getAttendanceStatus = async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.userId;
+      const todayStr = new Date().toISOString().split('T')[0];
+  
+      // Check for today's active record (source of truth)
+      const activeSession = await Attendance.findOne({
+        user: userId,
+        date: todayStr,
+        checkOut: null 
+      });
+  
+      res.status(200).json({
+        success: true,
+        data: {
+          isClockedIn: !!activeSession, 
+          checkInTime: activeSession ? activeSession.checkIn : null
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Error checking status" });
+    }
+  };
 
 /**
  * Get Attendance History for a user
@@ -156,3 +184,28 @@ export const getWorkHours = async (req: Request, res: Response): Promise<void> =
       sendError(res, error, 500);
     }
   };
+
+//   export const getAttendanceStatus = async (req: Request, res: Response) => {
+//     try {
+//       const userId = req.user?.userId;
+//       // Use the YYYY-MM-DD string format to match your Service logic
+//       const todayStr = new Date().toISOString().split('T')[0];
+  
+//       // Look for a record today where checkOut is strictly NULL
+//       const activeSession = await Attendance.findOne({
+//         user: userId,
+//         date: todayStr,
+//         checkOut: null // Matches the updated Model default
+//       });
+  
+//       res.status(200).json({
+//         success: true,
+//         data: {
+//           isClockedIn: !!activeSession, 
+//           checkInTime: activeSession ? activeSession.checkIn : null
+//         }
+//       });
+//     } catch (error) {
+//       res.status(500).json({ success: false, message: "Error checking status" });
+//     }
+//   };

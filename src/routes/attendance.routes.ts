@@ -1,6 +1,6 @@
 import { Router } from 'express';// Your existing TS auth middleware
-import { authenticateToken, requireAuth } from '../middleware/auth';
-import { clockIn, clockOut, getMonthlyReport, getMyAttendance } from '../controllers/attendance.controller';
+import { authenticateToken, requireAuth, requireClockIn } from '../middleware/auth';
+import { clockIn, clockOut, getAttendanceStatus, getMonthlyReport, getMyAttendance, getWorkHours } from '../controllers/attendance.controller';
 
 const router = Router();
 
@@ -35,6 +35,8 @@ router.get(
   getMyAttendance
 );
 
+
+router.get('/getWorkHours',getWorkHours)
 /**
  * @route   GET /api/attendance/monthly-report
  * @desc    Get total hours and days for salary calculation
@@ -45,5 +47,8 @@ router.get(
   
   getMonthlyReport
 );
+
+
+router.get('/status', getAttendanceStatus);
 
 export default router;

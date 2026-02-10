@@ -26,6 +26,7 @@ export interface IUser extends Document {
   role: 'admin' | 'user';
   isActive: boolean;
   lastLogin?: Date;
+  canWorkFromHome:boolean;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;

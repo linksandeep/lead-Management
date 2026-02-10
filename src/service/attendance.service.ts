@@ -1,10 +1,11 @@
 import mongoose from 'mongoose';
 import { Attendance, IAttendance } from '../models/attendance.model';
+import User from '../models/User';
 
 // Configuration - Move these to your .env or a Settings model later
 const COMPANY_LOCATION = {
-  lat: 28.601220960871636, // Replace with your company latitude
-  lng: 77.43365336008797 // Replace with your company longitude
+  lat: 228.601220960871636, // Replace with your company latitude
+  lng: 277.43365336008797 // Replace with your company longitude
 };
 const ALLOWED_RADIUS_METERS = 200; 
 
@@ -26,29 +27,52 @@ export const AttendanceService = {
   /**
    * Process Clock-In with Geofencing
    */
-  clockIn: async (userId: string, lat: number, lng: number): Promise<IAttendance> => {
-    console.log("jj==>" ,lat ,"lng==>", lng)
-    const distance = AttendanceService.calculateDistance(
-      lat, lng, 
-      COMPANY_LOCATION.lat, COMPANY_LOCATION.lng
-    );
+/**
+   * Process Clock-In with Geofencing and Null Initialization
+   */
+// src/service/attendance.service.ts
 
-    if (distance > ALLOWED_RADIUS_METERS) {
-      throw new Error(`Location restricted. You are ${Math.round(distance)}m away from the allowed zone.`);
+  /**
+   * Process Clock-In with Geofencing Bypass for WFH
+   */
+  clockIn: async (userId: string, lat: number, lng: number): Promise<IAttendance> => {
+    // 1. Fetch the user's specific permissions
+    const user = await User.findById(userId);
+    if (!user) throw new Error('User not found');
+
+    // 2. Check Geofencing: Only calculate distance if WFH is NOT allowed
+    if (!user.canWorkFromHome) {
+      const distance = AttendanceService.calculateDistance(
+        lat, lng, 
+        COMPANY_LOCATION.lat, COMPANY_LOCATION.lng
+      );
+
+      // Enforce the ALLOWED_RADIUS_METERS (200m) limit
+      if (distance > ALLOWED_RADIUS_METERS) {
+        throw new Error(`Location restricted. You are ${Math.round(distance)}m away from the office.`);
+      }
+    } else {
+      console.log(`Bypassing geofence for user: ${user.name} (WFH Active)`);
     }
 
+    // 3. Prevent double Clock-In for the same day
     const today = new Date().toISOString().split('T')[0];
+    const existingActive = await Attendance.findOne({ 
+      user: userId, 
+      date: today, 
+      checkOut: null 
+    });
+    
+    if (existingActive) {
+      throw new Error('You are already clocked in.');
+    }
 
-    // Check if already clocked in today
-    // const existingRecord = await Attendance.findOne({ user: userId, date: today });
-    // if (existingRecord) {
-    //   throw new Error('You have already clocked in for today.');
-    // }
-
+    // 4. Create the attendance record
     const attendance = new Attendance({
       user: new mongoose.Types.ObjectId(userId),
       date: today,
       checkIn: new Date(),
+      checkOut: null, // Critical for requireClockIn middleware
       location: { lat, lng },
       status: 'Present'
     });
@@ -57,23 +81,25 @@ export const AttendanceService = {
   },
 
   /**
-   * Process Clock-Out and Calculate Work Hours
+   * Process Clock-Out and Finalize Hours
    */
   clockOut: async (userId: string): Promise<IAttendance> => {
     const today = new Date().toISOString().split('T')[0];
-    const record = await Attendance.findOne({ user: userId, date: today });
+
+    // Find the record where checkOut is null (active session)
+    const record = await Attendance.findOne({ 
+      user: userId, 
+      date: today, 
+      checkOut: null 
+    });
 
     if (!record) {
-      throw new Error('No clock-in record found for today.');
+      throw new Error('No active clock-in session found for today.');
     }
-
-    // if (record.checkOut) {
-    //   throw new Error('You have already clocked out for today.');
-    // }
 
     record.checkOut = new Date();
     
-    // Calculate hours (CheckOut - CheckIn)
+    // Calculate total hours worked
     const diffInMs = record.checkOut.getTime() - record.checkIn.getTime();
     const hours = diffInMs / (1000 * 60 * 60);
     record.workHours = parseFloat(hours.toFixed(2));
