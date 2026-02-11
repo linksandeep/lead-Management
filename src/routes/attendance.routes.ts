@@ -1,5 +1,5 @@
 import { Router } from 'express';// Your existing TS auth middleware
-import { authenticateToken, requireAuth, requireClockIn } from '../middleware/auth';
+import { authenticateToken, requireAuth } from '../middleware/auth';
 import { clockIn, clockOut, getAttendanceStatus, getMonthlyReport, getMyAttendance, getWorkHours } from '../controllers/attendance.controller';
 
 const router = Router();
