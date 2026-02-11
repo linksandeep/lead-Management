@@ -32,7 +32,7 @@ import { authenticateToken, requireAuth, requireAdmin, requireClockIn } from '..
 const router = Router();
 
 // All lead routes require authentication
-router.use(authenticateToken, requireAuth,requireClockIn);
+router.use(authenticateToken, requireAuth);
 
 
 
@@ -42,7 +42,7 @@ router.use(authenticateToken, requireAuth,requireClockIn);
 // My leads endpoint (for users to see their assigned leads)
 router.get('/admin-stats',requireAdmin, getAdminLeadStats);
 
-router.get('/my-leads',requireClockIn, getMyLeads);
+router.get('/my-leads', getMyLeads);
 
 // My leads stats endpoint
 router.get('/my-leads/stats', getMyLeadsStats);
@@ -51,7 +51,7 @@ router.get('/my-leads/stats', getMyLeadsStats);
 router.get('/folders', getDistinctFolders);
 
 // Get folder counts for better performance
-router.get('/folder-counts',requireClockIn, getFolderCounts);
+router.get('/folder-counts', getFolderCounts);
 router.get('/folder-countsALL',getFolderCountsForAdmin)
 /* =============== BULK / ASSIGNMENT =============== */
 // Lead assignment (admin only)
@@ -73,6 +73,7 @@ router.get('/import/fields', requireAdmin, getLeadFields);
 
 router.post(
   '/import/analyze',
+  requireClockIn,
   requireAdmin,
   uploadExcel,
   handleUploadError,
