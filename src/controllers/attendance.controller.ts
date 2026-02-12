@@ -186,6 +186,28 @@ export const getWorkHours = async (req: Request, res: Response): Promise<void> =
     }
   };
 
+
+
+  export const getAdminReport = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const from = req.query.from as string;
+        const to = req.query.to as string;
+        const period = req.query.period as string;
+        
+        // Ensure numbers are handled correctly
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.max(1, parseInt(req.query.limit as string) || 10);
+
+        const result = await AttendanceService.generateAdminReport(from, to, page, limit, period);
+
+        res.status(200).json({
+            success: true,
+            ...result
+        });
+    } catch (error: any) {
+        sendError(res, error, 500);
+    }
+};
 //   export const getAttendanceStatus = async (req: Request, res: Response) => {
 //     try {
 //       const userId = req.user?.userId;

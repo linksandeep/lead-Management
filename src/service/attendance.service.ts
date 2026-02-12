@@ -208,5 +208,109 @@ export const AttendanceService = {
 
     // Return the aggregated data or default zeros if no records found
     return stats[0] || { totalHours: 0, count: 0 };
-  }
-};
+  },
+  generateAdminReport: async (from: string, to: string, page: number, limit: number, period?: string) => {
+    const todayStr = new Date().toLocaleDateString('en-CA'); 
+    let query: any = {};
+
+    if (period === 'today') {
+        query.date = todayStr;
+    } else if (from && to) {
+        query.date = { $gte: String(from).trim(), $lte: String(to).trim() };
+    }
+
+    const records = await Attendance.find(query)
+        .populate('user', 'name email')
+        .sort({ date: -1, checkIn: 1 })
+        .lean();
+
+    const dateGroups: any = {};
+    // Map to store: { total: number, autoLogout: number }
+    const userStats: Map<string, { total: number, auto: number }> = new Map();
+
+    records.forEach((r: any) => {
+        const uId = r.user?._id?.toString() || 'unknown';
+        const uName = r.user?.name || 'Unknown User';
+        const rDate = r.date;
+        
+        let co = r.checkOut;
+        let wh = Number(r.workHours) || 0;
+        let isAutoLogout = false;
+
+        // --- 🚀 AUTO-LOGOUT LOGIC ---
+        if (!co && rDate < todayStr) {
+            wh = 8.0; 
+            co = "Auto-Closed (8h)";
+            isAutoLogout = true;
+        }
+
+        // --- 1. GROUP BY DATE (Daily View) ---
+        if (!dateGroups[rDate]) dateGroups[rDate] = {};
+        if (!dateGroups[rDate][uId]) {
+            dateGroups[rDate][uId] = {
+                userName: uName,
+                userEmail: r.user?.email || 'N/A',
+                date: rDate,
+                totalWorkHours: 0,
+                lastCheckOut: co || "Active",
+                sessions: []
+            };
+        }
+
+        const userDay = dateGroups[rDate][uId];
+        userDay.totalWorkHours = Number((userDay.totalWorkHours + wh).toFixed(2));
+        userDay.lastCheckOut = co || "Active";
+        userDay.sessions.push({
+            checkIn: r.checkIn,
+            checkOut: co || "Active",
+            hours: wh,
+            isAutoClosed: isAutoLogout
+        });
+
+        // --- 2. SUM TO GRAND TOTALS ---
+        const stats = userStats.get(uId) || { total: 0, auto: 0 };
+        stats.total = Number((stats.total + wh).toFixed(2));
+        if (isAutoLogout) {
+            stats.auto = Number((stats.auto + 8.0).toFixed(2));
+        }
+        userStats.set(uId, stats);
+    });
+
+    // --- PAGINATION ON DATES ---
+    const allSortedDates = Object.keys(dateGroups).sort().reverse();
+    const startIndex = (page - 1) * limit;
+    const paginatedDates = allSortedDates.slice(startIndex, startIndex + limit);
+
+    const paginatedReport: any = {};
+    paginatedDates.forEach(date => {
+        paginatedReport[date] = Object.values(dateGroups[date]);
+    });
+
+    // --- PREPARE SUMMARY WITH AUTO-LOGOUT HOURS ---
+// --- PREPARE SUMMARY WITH AUTO-LOGOUT HOURS ---
+const summary = Array.from(userStats.keys()).map(id => {
+    const sample = records.find(rec => (rec.user?._id?.toString() || rec.user?.toString()) === id);
+    const stats = userStats.get(id);
+    
+    // 🚀 FIX: Type cast 'sample.user' as 'any' to access '.name' without errors
+    const userObj = sample?.user as any; 
+
+    return {
+        userName: userObj?.name || 'Unknown',
+        totalHoursInRange: stats?.total || 0,
+        autoLogoutHours: stats?.auto || 0
+    };
+}).sort((a, b) => b.totalHoursInRange - a.totalHoursInRange);
+
+    return {
+        report: paginatedReport,
+        userGrandTotals: summary,
+        pagination: {
+            totalDates: allSortedDates.length,
+            currentPage: page,
+            limit: limit,
+            totalPages: Math.ceil(allSortedDates.length / limit)
+        }
+    };
+}
+}

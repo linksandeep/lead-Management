@@ -1,6 +1,6 @@
 import { Router } from 'express';// Your existing TS auth middleware
-import { authenticateToken, requireAuth } from '../middleware/auth';
-import { clockIn, clockOut, getAttendanceStatus, getMonthlyReport, getMyAttendance, getWorkHours } from '../controllers/attendance.controller';
+import { authenticateToken, requireAdmin, requireAuth } from '../middleware/auth';
+import { clockIn, clockOut, getAdminReport, getAttendanceStatus, getMonthlyReport, getMyAttendance, getWorkHours } from '../controllers/attendance.controller';
 
 const router = Router();
 
@@ -46,6 +46,13 @@ router.get(
   '/monthly-report', 
   
   getMonthlyReport
+);
+
+// Ensure requireAdmin is used to protect sensitive employee data
+router.get(
+  '/admin/report', 
+   requireAdmin,
+  getAdminReport // <--- Added the controller here
 );
 
 
