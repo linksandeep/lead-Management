@@ -312,5 +312,155 @@ const summary = Array.from(userStats.keys()).map(id => {
             totalPages: Math.ceil(allSortedDates.length / limit)
         }
     };
-}
-}
+},
+
+  getUserAnalytics: async (userId: string, filters: { from?: string, to?: string, month?: string, year?: string, page: number, limit: number }) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    let query: any = { user: new mongoose.Types.ObjectId(userId) };
+
+    // 1. Build Query based on Filters
+    if (filters.month && filters.year) {
+      // Matches "2025-01"
+      const monthPattern = `${filters.year}-${filters.month.padStart(2, '0')}`;
+      query.date = { $regex: new RegExp(`^${monthPattern}`) };
+    } else if (filters.year) {
+      // Matches "2025"
+      query.date = { $regex: new RegExp(`^${filters.year}`) };
+    } else if (filters.from && filters.to) {
+      query.date = { $gte: filters.from, $lte: filters.to };
+    }
+
+    // 2. Fetch Data
+    const records = await Attendance.find(query).sort({ date: -1, checkIn: 1 }).lean();
+
+    let totalWorkingHours = 0;
+    let autoLogoutHours = 0;
+    const presentDatesSet = new Set<string>();
+
+    // 3. Process Analytics
+    const dailyLogs = records.reduce((acc: any, r: any) => {
+      const rDate = r.date;
+      let wh = Number(r.workHours) || 0;
+      let co = r.checkOut;
+      let isAuto = false;
+
+      if (!co && rDate < todayStr) {
+        wh = 8.0;
+        co = "Auto-Closed (8h)";
+        isAuto = true;
+        autoLogoutHours += 8.0;
+      }
+
+      totalWorkingHours += wh;
+      presentDatesSet.add(rDate);
+
+      if (!acc[rDate]) {
+        acc[rDate] = { date: rDate, dayTotal: 0, sessions: [] };
+      }
+
+      acc[rDate].dayTotal = Number((acc[rDate].dayTotal + wh).toFixed(2));
+      acc[rDate].sessions.push({
+        checkIn: r.checkIn,
+        checkOut: co || "Active",
+        hours: wh,
+        isAutoClosed: isAuto
+      });
+
+      return acc;
+    }, {});
+
+    // 4. Calculate Days
+    const totalPresent = presentDatesSet.size;
+    
+    // logic to estimate days in range/month for "Not Present"
+    let daysInPeriod = 30; // Default fallback
+    if (filters.month && filters.year) {
+        daysInPeriod = new Date(Number(filters.year), Number(filters.month), 0).getDate();
+    }
+
+    const reportArray = Object.values(dailyLogs);
+    const startIndex = (filters.page - 1) * filters.limit;
+    const paginatedLogs = reportArray.slice(startIndex, startIndex + filters.limit);
+
+    return {
+      stats: {
+        totalWorkingHours: Number(totalWorkingHours.toFixed(2)),
+        autoLogoutHours: Number(autoLogoutHours.toFixed(2)),
+        totalDaysPresent: totalPresent,
+        totalDaysNotPresent: Math.max(0, daysInPeriod - totalPresent),
+      },
+      attendanceHistory: paginatedLogs,
+      pagination: {
+        totalDaysLogged: reportArray.length,
+        currentPage: filters.page,
+        totalPages: Math.ceil(reportArray.length / filters.limit)
+      }
+    };
+  }
+};
+
+
+
+// attendance.service.ts
+
+import moment from 'moment';
+
+export const getAttendanceReportService = async (fromDate: string, toDate: string) => {
+  // Pull start time (e.g., "09:00") from env
+  const OFFICE_START_TIME = process.env.OFFICE_START_TIME || "09:00";
+  
+  // 1. Fetch all active users to determine who is "Absent"
+  const users = await User.find({ isActive: true });
+  
+  // 2. Fetch all logs for the date range
+  const logs = await Attendance.find({
+    date: { $gte: fromDate, $lte: toDate }
+  });
+
+  const details = users.map(user => {
+    // Match logs to users using the 'user' field from your schema
+    const userLogs = logs.filter(l => l.user.toString() === user.id.toString());
+    
+    // Find the entry for the current day to show real-time status
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayLog = userLogs.find(l => l.date === todayStr);
+    
+    let minutesLate = 0;
+    if (todayLog && todayLog.checkIn) {
+      // Create a comparison moment for the expected start time on that specific day
+      const checkInMoment = moment(todayLog.checkIn);
+      const expectedTime = moment(todayLog.checkIn).set({
+        hour: parseInt(OFFICE_START_TIME.split(':')[0]),
+        minute: parseInt(OFFICE_START_TIME.split(':')[1]),
+        second: 0
+      });
+      
+      if (checkInMoment.isAfter(expectedTime)) {
+        minutesLate = checkInMoment.diff(expectedTime, 'minutes');
+      }
+    }
+
+    return {
+      userId: user._id,
+      name: user.name,
+      status: todayLog ? todayLog.status : "Absent", // Uses 'Present' | 'Late' | 'Half-day' from your schema
+      checkIn: todayLog?.checkIn || null,
+      checkOut: todayLog?.checkOut || null,
+      minutesLate: minutesLate > 0 ? minutesLate : 0,
+      isLate: minutesLate > 0,
+      // If they checked in today but checkOut is still null, they are "Present Right Now"
+      isPresentNow: todayLog && todayLog.checkOut === null 
+    };
+  });
+
+  return {
+    summary: {
+      totalEmployees: users.length,
+      presentRightNow: details.filter(d => d.isPresentNow).length,
+      presentToday: details.filter(d => d.status !== "Absent").length,
+      lateToday: details.filter(d => d.isLate).length,
+      absentToday: details.filter(d => d.status === "Absent").length
+    },
+    details
+  };
+};

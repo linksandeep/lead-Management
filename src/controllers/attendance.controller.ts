@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AttendanceService } from '../service/attendance.service';
+import { AttendanceService, getAttendanceReportService } from '../service/attendance.service';
 import { sendError } from '../utils/sendError';
 import { Attendance } from '../models/attendance.model';
 
@@ -208,6 +208,66 @@ export const getWorkHours = async (req: Request, res: Response): Promise<void> =
         sendError(res, error, 500);
     }
 };
+
+
+export const getEmployeeAnalytics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId } = req.params;
+    const { from, to, month, year, page = 1, limit = 10 } = req.query;
+
+    const result = await AttendanceService.getUserAnalytics(userId, {
+      from: from as string,
+      to: to as string,
+      month: month as string,
+      year: year as string,
+      page: Number(page),
+      limit: Number(limit)
+    });
+
+    res.status(200).json({
+      success: true,
+      ...result
+    });
+  } catch (error: any) {
+    sendError(res, error, 500);
+  }
+};
+
+
+
+/**
+ * GET /api/attendance/report
+ * Returns today's summary and detailed attendance logs
+ */
+export const getAttendanceReport = async (req: Request, res: Response) => {
+  try {
+    const { fromDate, toDate } = req.query;
+
+    // 1. Default to today's date if no range is provided
+    const today = new Date().toISOString().split('T')[0];
+    const start = fromDate ? String(fromDate) : today;
+    const end = toDate ? String(toDate) : today;
+
+    // 2. Call the service to calculate presence, lateness, and active status
+    const report = await getAttendanceReportService(start, end);
+
+    // 3. Return the response
+    res.status(200).json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      filters: { start, end },
+      data: report
+    });
+
+  } catch (error: any) {
+    console.error('Attendance Report Error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate attendance report",
+      error: process.env.NODE_ENV === 'development' ? error.message : "Internal Server Error"
+    });
+  }
+};
 //   export const getAttendanceStatus = async (req: Request, res: Response) => {
 //     try {
 //       const userId = req.user?.userId;
@@ -232,3 +292,39 @@ export const getWorkHours = async (req: Request, res: Response): Promise<void> =
 //       res.status(500).json({ success: false, message: "Error checking status" });
 //     }
 //   };
+
+
+import moment from 'moment';
+import { getUserFullPerformance } from '../service/performance.service';
+
+export const getUserAnalytics = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { range, from, to } = req.query;
+
+    // Default: Current Month
+    let startDate = moment().startOf('month').toDate();
+    let endDate = moment().endOf('day').toDate();
+
+    if (range === 'week') {
+      startDate = moment().startOf('week').toDate();
+    } else if (range === 'year') {
+      startDate = moment().startOf('year').toDate();
+    } else if (from && to) {
+      startDate = moment(String(from)).startOf('day').toDate();
+      endDate = moment(String(to)).endOf('day').toDate();
+    }
+
+    const data = await getUserFullPerformance(userId, { startDate, endDate });
+
+    res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error generating user analytics'
+    });
+  }
+};
