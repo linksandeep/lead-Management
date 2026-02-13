@@ -19,7 +19,8 @@ const defaultStatuses = [
   { name: 'Not Interested', isDefault: true, order: 9 },
   { name: 'Wrong Number', isDefault: true, order: 10 },
   { name: 'Call Back', isDefault: true, order: 11 },
-  {name :"Didn't Require", isDefault:true,order:12}
+  {name :"Didn't Require", isDefault:true,order:12},
+  {name:"Next Year",isDefault:true,order:13}
 ];
 
 async function seedStatuses() {
