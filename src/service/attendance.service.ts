@@ -405,29 +405,41 @@ const summary = Array.from(userStats.keys()).map(id => {
 
 import moment from 'moment';
 
-export const getAttendanceReportService = async (fromDate: string, toDate: string) => {
-  // Pull start time (e.g., "09:00") from env
+export const getAttendanceReportService = async (
+  fromDate: string, 
+  toDate: string, 
+  page: number, 
+  limit: number
+) => {
   const OFFICE_START_TIME = process.env.OFFICE_START_TIME || "09:00";
   
-  // 1. Fetch all active users to determine who is "Absent"
-  const users = await User.find({ isActive: true });
+  // 1. Get total count for pagination metadata
+  const totalEmployees = await User.countDocuments({ isActive: true });
   
-  // 2. Fetch all logs for the date range
+  // 2. Fetch paginated users
+  const users = await User.find({ isActive: true })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .select('name email _id');
+
+  // 3. Fetch all logs for the date range for these specific users
+  const userIds = users.map(u => u._id);
   const logs = await Attendance.find({
+    user: { $in: userIds },
     date: { $gte: fromDate, $lte: toDate }
   });
 
+  // 4. Determine Global Summary (Requires a separate check for all users)
+  // To keep the HUD stats accurate, we count statuses across the whole range
+  const allLogsToday = await Attendance.find({ date: new Date().toISOString().split('T')[0] });
+
   const details = users.map(user => {
-    // Match logs to users using the 'user' field from your schema
     const userLogs = logs.filter(l => l.user.toString() === user.id.toString());
-    
-    // Find the entry for the current day to show real-time status
     const todayStr = new Date().toISOString().split('T')[0];
     const todayLog = userLogs.find(l => l.date === todayStr);
     
     let minutesLate = 0;
     if (todayLog && todayLog.checkIn) {
-      // Create a comparison moment for the expected start time on that specific day
       const checkInMoment = moment(todayLog.checkIn);
       const expectedTime = moment(todayLog.checkIn).set({
         hour: parseInt(OFFICE_START_TIME.split(':')[0]),
@@ -443,23 +455,28 @@ export const getAttendanceReportService = async (fromDate: string, toDate: strin
     return {
       userId: user._id,
       name: user.name,
-      status: todayLog ? todayLog.status : "Absent", // Uses 'Present' | 'Late' | 'Half-day' from your schema
+      status: todayLog ? todayLog.status : "Absent",
       checkIn: todayLog?.checkIn || null,
       checkOut: todayLog?.checkOut || null,
       minutesLate: minutesLate > 0 ? minutesLate : 0,
       isLate: minutesLate > 0,
-      // If they checked in today but checkOut is still null, they are "Present Right Now"
       isPresentNow: todayLog && todayLog.checkOut === null 
     };
   });
 
   return {
+    pagination: {
+      totalEmployees,
+      currentPage: page,
+      totalPages: Math.ceil(totalEmployees / limit),
+      hasNextPage: page * limit < totalEmployees
+    },
     summary: {
-      totalEmployees: users.length,
-      presentRightNow: details.filter(d => d.isPresentNow).length,
-      presentToday: details.filter(d => d.status !== "Absent").length,
-      lateToday: details.filter(d => d.isLate).length,
-      absentToday: details.filter(d => d.status === "Absent").length
+      totalEmployees,
+      presentRightNow: allLogsToday.filter(l => l.checkOut === null).length,
+      presentToday: allLogsToday.length,
+      lateToday: details.filter(d => d.isLate).length, // Note: This is now page-specific
+      absentToday: totalEmployees - allLogsToday.length
     },
     details
   };

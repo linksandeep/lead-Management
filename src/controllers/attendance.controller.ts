@@ -241,26 +241,31 @@ export const getEmployeeAnalytics = async (req: Request, res: Response): Promise
  */
 export const getAttendanceReport = async (req: Request, res: Response) => {
   try {
-    const { fromDate, toDate } = req.query;
+    const { fromDate, toDate, page, limit } = req.query;
 
-    // 1. Default to today's date if no range is provided
+    // 1. Default filters and pagination
     const today = new Date().toISOString().split('T')[0];
     const start = fromDate ? String(fromDate) : today;
     const end = toDate ? String(toDate) : today;
+    
+    const pageNum = parseInt(String(page)) || 1;
+    const limitNum = parseInt(String(limit)) || 10;
 
-    // 2. Call the service to calculate presence, lateness, and active status
-    const report = await getAttendanceReportService(start, end);
+    // 2. Call service with pagination parameters
+    const report = await getAttendanceReportService(start, end, pageNum, limitNum);
 
-    // 3. Return the response
     res.status(200).json({
       success: true,
       timestamp: new Date().toISOString(),
       filters: { start, end },
-      data: report
+      pagination: report.pagination, // Return metadata for the frontend
+      data: {
+        summary: report.summary,
+        details: report.details
+      }
     });
 
   } catch (error: any) {
-    console.error('Attendance Report Error:', error);
     res.status(500).json({
       success: false,
       message: "Failed to generate attendance report",
