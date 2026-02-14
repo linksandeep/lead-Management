@@ -210,7 +210,7 @@ export const AttendanceService = {
     return stats[0] || { totalHours: 0, count: 0 };
   },
   generateAdminReport: async (from: string, to: string, page: number, limit: number, period?: string) => {
-    const todayStr = new Date().toLocaleDateString('en-CA'); 
+    const todayStr = new Date().toISOString().split('T')[0]; 
     let query: any = {};
 
     if (period === 'today') {
@@ -219,14 +219,20 @@ export const AttendanceService = {
         query.date = { $gte: String(from).trim(), $lte: String(to).trim() };
     }
 
+    // Fetch all users to calculate "Absent" status correctly
+    const allUsers = await User.find({ role: { $ne: 'superAdmin' } }).select('name email').lean();
     const records = await Attendance.find(query)
         .populate('user', 'name email')
         .sort({ date: -1, checkIn: 1 })
         .lean();
 
     const dateGroups: any = {};
-    // Map to store: { total: number, autoLogout: number }
     const userStats: Map<string, { total: number, auto: number }> = new Map();
+
+    // Stats for the "summary" object
+    let presentRightNow = 0;
+    let lateTodayCount = 0;
+    const presentTodaySet = new Set();
 
     records.forEach((r: any) => {
         const uId = r.user?._id?.toString() || 'unknown';
@@ -244,15 +250,26 @@ export const AttendanceService = {
             isAutoLogout = true;
         }
 
-        // --- 1. GROUP BY DATE (Daily View) ---
+        // Stats tracking
+        if (rDate === todayStr) {
+            presentTodaySet.add(uId);
+            if (!r.checkOut) presentRightNow++;
+            if (r.isLate) lateTodayCount++;
+        }
+
+        // --- 1. GROUP BY DATE ---
         if (!dateGroups[rDate]) dateGroups[rDate] = {};
         if (!dateGroups[rDate][uId]) {
             dateGroups[rDate][uId] = {
+                userId: uId,
                 userName: uName,
                 userEmail: r.user?.email || 'N/A',
                 date: rDate,
+                status: "Present", // Default to Present if a record exists
                 totalWorkHours: 0,
                 lastCheckOut: co || "Active",
+                minutesLate: r.minutesLate || 0,
+                isLate: r.isLate || false,
                 sessions: []
             };
         }
@@ -264,16 +281,37 @@ export const AttendanceService = {
             checkIn: r.checkIn,
             checkOut: co || "Active",
             hours: wh,
-            isAutoClosed: isAutoLogout
+            isAutoClosed: isAutoLogout,
+            isLate: r.isLate || false
         });
 
         // --- 2. SUM TO GRAND TOTALS ---
         const stats = userStats.get(uId) || { total: 0, auto: 0 };
         stats.total = Number((stats.total + wh).toFixed(2));
-        if (isAutoLogout) {
-            stats.auto = Number((stats.auto + 8.0).toFixed(2));
-        }
+        if (isAutoLogout) stats.auto = Number((stats.auto + 8.0).toFixed(2));
         userStats.set(uId, stats);
+    });
+
+    // --- 3. INJECT ABSENT USERS FOR EACH DATE ---
+    // Only applies if looking at historical data
+    Object.keys(dateGroups).forEach(date => {
+        allUsers.forEach(user => {
+            const userId = user._id.toString();
+            if (!dateGroups[date][userId]) {
+                dateGroups[date][userId] = {
+                    userId: userId,
+                    userName: user.name,
+                    userEmail: user.email,
+                    date: date,
+                    status: "Absent",
+                    totalWorkHours: 0,
+                    lastCheckOut: null,
+                    minutesLate: 0,
+                    isLate: false,
+                    sessions: []
+                };
+            }
+        });
     });
 
     // --- PAGINATION ON DATES ---
@@ -286,25 +324,27 @@ export const AttendanceService = {
         paginatedReport[date] = Object.values(dateGroups[date]);
     });
 
-    // --- PREPARE SUMMARY WITH AUTO-LOGOUT HOURS ---
-// --- PREPARE SUMMARY WITH AUTO-LOGOUT HOURS ---
-const summary = Array.from(userStats.keys()).map(id => {
-    const sample = records.find(rec => (rec.user?._id?.toString() || rec.user?.toString()) === id);
-    const stats = userStats.get(id);
-    
-    // 🚀 FIX: Type cast 'sample.user' as 'any' to access '.name' without errors
-    const userObj = sample?.user as any; 
+    const userGrandSummary = Array.from(userStats.keys()).map(id => {
+        const sample = records.find(rec => (rec.user?._id?.toString() || rec.user?.toString()) === id);
+        const stats = userStats.get(id);
+        const userObj = sample?.user as any; 
+        return {
+            userName: userObj?.name || 'Unknown',
+            totalHoursInRange: stats?.total || 0,
+            autoLogoutHours: stats?.auto || 0
+        };
+    }).sort((a, b) => b.totalHoursInRange - a.totalHoursInRange);
 
     return {
-        userName: userObj?.name || 'Unknown',
-        totalHoursInRange: stats?.total || 0,
-        autoLogoutHours: stats?.auto || 0
-    };
-}).sort((a, b) => b.totalHoursInRange - a.totalHoursInRange);
-
-    return {
+        summary: {
+            totalEmployees: allUsers.length,
+            presentRightNow: presentRightNow,
+            presentToday: presentTodaySet.size,
+            lateToday: lateTodayCount,
+            absentToday: allUsers.length - presentTodaySet.size
+        },
         report: paginatedReport,
-        userGrandTotals: summary,
+        userGrandTotals: userGrandSummary,
         pagination: {
             totalDates: allSortedDates.length,
             currentPage: page,

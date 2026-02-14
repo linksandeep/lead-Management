@@ -52,7 +52,7 @@ router.get('/folders', getDistinctFolders);
 
 // Get folder counts for better performance
 router.get('/folder-counts',requireClockIn, getFolderCounts);
-router.get('/folder-countsALL',getFolderCountsForAdmin)
+router.get('/folder-countsALL',requireClockIn,getFolderCountsForAdmin)
 /* =============== BULK / ASSIGNMENT =============== */
 // Lead assignment (admin only)
 router.post('/assign', requireAdmin, assignLeads);
