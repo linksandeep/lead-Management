@@ -8,6 +8,7 @@ import remindersRouter from './reminders.route'
 import ChatRouter from './chat.route'
 import attendanceRouter from './attendance.routes'
 import performanceRouter from './performance.route'
+import hrRoute from './hr.routes'
 const router = Router();
 // Mount routes
 router.use('/auth', authRoutes);
@@ -19,6 +20,7 @@ router.use('/reminders', remindersRouter);
 router.use("/chat",ChatRouter)
 router.use("/attendance",attendanceRouter);
 router.use('/performance',performanceRouter)
+router.use('/hr',hrRoute)
 // Health check for API
 router.get('/health', (_req, res) => {
   res.json({
