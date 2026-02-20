@@ -7,7 +7,7 @@ export interface ILeave extends Document {
   endDate: string;
   totalDays: number;
   reason: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
   approvedBy: mongoose.Types.ObjectId;
 }
 

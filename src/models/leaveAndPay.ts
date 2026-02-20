@@ -1,6 +1,6 @@
-// models/Salary.model.ts
 import mongoose, { Schema, Document } from 'mongoose';
 
+// 1. Updated Interface with Method Signatures
 export interface ISalary extends Document {
   user: mongoose.Types.ObjectId;
   employeeId: string;
@@ -56,6 +56,16 @@ export interface ISalary extends Document {
     updatedAt: Date;
   }[];
   isActive: boolean;
+
+  // Method declarations for TypeScript visibility
+  calculateMonthlyInHand(): number;
+  getTaxBreakup(): {
+    annualIncome: number;
+    taxableIncome: number;
+    taxAmount: number;
+    cess: number;
+    totalTax: number;
+  };
 }
 
 export interface ILeavePolicy extends Document {
@@ -68,8 +78,8 @@ export interface ILeavePolicy extends Document {
   maxCarryForward?: number;
   isEncashable: boolean;
   applicableTo: ('full-time' | 'part-time' | 'contract' | 'probation' | 'intern' | 'trainee')[];
-  minServiceDays?: number; // Minimum service days before eligibility
-  proRated: boolean; // Whether leave is pro-rated for mid-year joiners
+  minServiceDays?: number;
+  proRated: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -98,24 +108,15 @@ export interface IHolidayPolicy extends Document {
     type: 'Public' | 'Company-Event' | 'Optional';
     optionalFor?: ('full-time' | 'part-time' | 'contract' | 'probation' | 'intern' | 'trainee')[];
   }[];
-  flexibleHolidays?: number; // Number of flexible holidays employee can choose
+  flexibleHolidays?: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Salary Schema
+// 2. Salary Schema Implementation
 const salarySchema = new Schema<ISalary>({
-  user: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true,
-    unique: true 
-  },
-  employeeId: { 
-    type: String, 
-    required: true,
-    index: true 
-  },
+  user: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  employeeId: { type: String, required: true, index: true },
   ctc: {
     annual: { type: Number, required: true },
     breakup: {
@@ -156,15 +157,8 @@ const salarySchema = new Schema<ISalary>({
       amount: { type: Number }
     }]
   },
-  effectiveDate: { 
-    type: Date, 
-    required: true,
-    default: Date.now 
-  },
-  updatedBy: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User' 
-  },
+  effectiveDate: { type: Date, required: true, default: Date.now },
+  updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   revisionHistory: [{
     oldCTC: { type: Number, required: true },
     newCTC: { type: Number, required: true },
@@ -173,163 +167,18 @@ const salarySchema = new Schema<ISalary>({
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     updatedAt: { type: Date, default: Date.now }
   }],
-  isActive: { 
-    type: Boolean, 
-    default: true 
-  }
+  isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
-// Leave Policy Schema
-const leavePolicySchema = new Schema<ILeavePolicy>({
-  title: { 
-    type: String, 
-    required: true 
-  },
-  description: { 
-    type: String 
-  },
-  leaveType: { 
-    type: String, 
-    enum: ['Sick', 'Casual', 'Paid', 'Unpaid', 'Maternity', 'Paternity', 'Bereavement', 'Marriage'],
-    required: true,
-    unique: true 
-  },
-  gender: { 
-    type: String, 
-    enum: ['Male', 'Female', 'All'],
-    default: 'All'
-  },
-  daysPerYear: { 
-    type: Number, 
-    required: true,
-    min: 0 
-  },
-  isCarryForward: { 
-    type: Boolean, 
-    default: false 
-  },
-  maxCarryForward: { 
-    type: Number,
-    min: 0 
-  },
-  isEncashable: { 
-    type: Boolean, 
-    default: false 
-  },
-  applicableTo: [{
-    type: String,
-    enum: ['full-time', 'part-time', 'contract', 'probation', 'intern', 'trainee']
-  }],
-  minServiceDays: { 
-    type: Number,
-    default: 0 
-  },
-  proRated: { 
-    type: Boolean, 
-    default: true 
-  }
-}, { timestamps: true });
-
-// Employee Leave Balance Schema
-const employeeLeaveBalanceSchema = new Schema<IEmployeeLeaveBalance>({
-  user: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
-  },
-  employeeId: { 
-    type: String, 
-    required: true 
-  },
-  year: { 
-    type: Number, 
-    required: true 
-  },
-  balances: [{
-    leaveType: { 
-      type: String, 
-      enum: ['Sick', 'Casual', 'Paid', 'Unpaid', 'Maternity', 'Paternity', 'Bereavement', 'Marriage'],
-      required: true 
-    },
-    allocated: { 
-      type: Number, 
-      required: true,
-      default: 0 
-    },
-    used: { 
-      type: Number, 
-      required: true,
-      default: 0 
-    },
-    pending: { 
-      type: Number, 
-      required: true,
-      default: 0 
-    },
-    remaining: { 
-      type: Number, 
-      required: true 
-    },
-    carriedForward: { 
-      type: Number,
-      default: 0 
-    },
-    expired: { 
-      type: Number,
-      default: 0 
-    }
-  }],
-  lastUpdated: { 
-    type: Date, 
-    default: Date.now 
-  }
-}, { timestamps: true });
-
-// Compound index to ensure one record per user per year
-employeeLeaveBalanceSchema.index({ user: 1, year: 1 }, { unique: true });
-
-// Holiday Policy Schema
-const holidayPolicySchema = new Schema<IHolidayPolicy>({
-  year: { 
-    type: Number, 
-    required: true,
-    unique: true 
-  },
-  holidays: [{
-    name: { type: String, required: true },
-    date: { type: Date, required: true },
-    type: { 
-      type: String, 
-      enum: ['Public', 'Company-Event', 'Optional'],
-      required: true 
-    },
-    optionalFor: [{
-      type: String,
-      enum: ['full-time', 'part-time', 'contract', 'probation', 'intern', 'trainee']
-    }]
-  }],
-  flexibleHolidays: { 
-    type: Number,
-    default: 0 
-  }
-}, { timestamps: true });
-
-// Indexes
-salarySchema.index({ employeeId: 1 });
-salarySchema.index({ user: 1 });
-salarySchema.index({ isActive: 1 });
-
-// Methods for salary
-salarySchema.methods.calculateMonthlyInHand = function(): number {
+// 3. Methods Implementation with Explicit 'this' typing
+salarySchema.methods.calculateMonthlyInHand = function(this: ISalary): number {
   return this.inHand.monthly;
 };
 
-salarySchema.methods.getTaxBreakup = function(): any {
-  // Calculate tax breakup based on Indian tax slabs
+salarySchema.methods.getTaxBreakup = function(this: ISalary): any {
   const annualIncome = this.inHand.annual;
   let tax = 0;
   
-  // Simplified tax calculation (you can make this more complex)
   if (annualIncome > 1000000) {
     tax = (annualIncome - 1000000) * 0.3 + 125000;
   } else if (annualIncome > 500000) {
@@ -347,7 +196,62 @@ salarySchema.methods.getTaxBreakup = function(): any {
   };
 };
 
-// Export models
+// Leave Policy Schema
+const leavePolicySchema = new Schema<ILeavePolicy>({
+  title: { type: String, required: true },
+  description: { type: String },
+  leaveType: { 
+    type: String, 
+    enum: ['Sick', 'Casual', 'Paid', 'Unpaid', 'Maternity', 'Paternity', 'Bereavement', 'Marriage'],
+    required: true,
+    unique: true 
+  },
+  gender: { type: String, enum: ['Male', 'Female', 'All'], default: 'All' },
+  daysPerYear: { type: Number, required: true, min: 0 },
+  isCarryForward: { type: Boolean, default: false },
+  maxCarryForward: { type: Number, min: 0 },
+  isEncashable: { type: Boolean, default: false },
+  applicableTo: [{ type: String, enum: ['full-time', 'part-time', 'contract', 'probation', 'intern', 'trainee'] }],
+  minServiceDays: { type: Number, default: 0 },
+  proRated: { type: Boolean, default: true }
+}, { timestamps: true });
+
+// Employee Leave Balance Schema
+const employeeLeaveBalanceSchema = new Schema<IEmployeeLeaveBalance>({
+  user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  employeeId: { type: String, required: true },
+  year: { type: Number, required: true },
+  balances: [{
+    leaveType: { 
+      type: String, 
+      enum: ['Sick', 'Casual', 'Paid', 'Unpaid', 'Maternity', 'Paternity', 'Bereavement', 'Marriage'],
+      required: true 
+    },
+    allocated: { type: Number, required: true, default: 0 },
+    used: { type: Number, required: true, default: 0 },
+    pending: { type: Number, required: true, default: 0 },
+    remaining: { type: Number, required: true },
+    carriedForward: { type: Number, default: 0 },
+    expired: { type: Number, default: 0 }
+  }],
+  lastUpdated: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+employeeLeaveBalanceSchema.index({ user: 1, year: 1 }, { unique: true });
+
+// Holiday Policy Schema
+const holidayPolicySchema = new Schema<IHolidayPolicy>({
+  year: { type: Number, required: true, unique: true },
+  holidays: [{
+    name: { type: String, required: true },
+    date: { type: Date, required: true },
+    type: { type: String, enum: ['Public', 'Company-Event', 'Optional'], required: true },
+    optionalFor: [{ type: String, enum: ['full-time', 'part-time', 'contract', 'probation', 'intern', 'trainee'] }]
+  }],
+  flexibleHolidays: { type: Number, default: 0 }
+}, { timestamps: true });
+
+// Final Export
 export const Salary = mongoose.model<ISalary>('Salary', salarySchema);
 export const LeavePolicy = mongoose.model<ILeavePolicy>('LeavePolicy', leavePolicySchema);
 export const EmployeeLeaveBalance = mongoose.model<IEmployeeLeaveBalance>('EmployeeLeaveBalance', employeeLeaveBalanceSchema);
