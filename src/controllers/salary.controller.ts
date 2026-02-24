@@ -186,7 +186,7 @@ export const initializeLeavePolicies = async (req: Request, res: Response): Prom
  * Get all leave policies
  * GET /api/salary/leave-policies
  */
-export const getLeavePolicies = async (req: Request, res: Response): Promise<Response> => {
+export const getLeavePolicies = async (_req: Request, res: Response): Promise<Response> => {
   try {
     const result = await SalaryService.getLeavePolicies();
     return res.status(200).json(result);

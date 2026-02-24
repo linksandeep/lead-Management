@@ -56,7 +56,7 @@ export interface SalaryData {
 }
 
 // Helper function to calculate in-hand from CTC
-const calculateInHandFromCTC = (ctc: number, breakup: CTCBreakup) => {
+const calculateInHandFromCTC = (_ctc: number, breakup: CTCBreakup) => {
   // Standard Indian salary calculations
   const monthlyBasic = breakup.basic / 12;
   const monthlyHRA = breakup.hra / 12;

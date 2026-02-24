@@ -114,7 +114,7 @@ export const getAllLeaves = async (req: Request, res: Response) => {
       throw new UnauthorizedError('Access denied. Admin privileges required.');
     }
 
-    const { status, leaveType, startDate, endDate, year } = req.query;
+    const { leaveType } = req.query;
 
     // This would need a new service method
     // For now, using getPendingLeaves as placeholder
