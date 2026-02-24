@@ -63,7 +63,7 @@ const leadSchema = new Schema<ILead>({
   },
   source: {
     type: String,
-    enum: ['Website', 'Social Media', 'Referral', 'Import', 'Manual', 'Cold Call', 'Email Campaign'] as LeadSource[],
+    enum: ['Website', 'Social Media', 'Referral', 'Import', 'Manual', 'Cold Call', 'Email Campaign','strategy_call_modal'] as LeadSource[],
     required: [true, 'Source is required'],
     default: 'Manual'
   },

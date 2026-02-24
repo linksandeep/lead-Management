@@ -317,7 +317,12 @@ export const updateLead = async (req: Request, res: Response): Promise<void> => 
         return;
       }
     }
-
+    if (Array.isArray(req.body.notes)) {
+      req.body.notes = req.body.notes.filter((n: any) => n.content && n.createdBy);
+      if (req.body.notes.length === 0) {
+        delete req.body.notes;
+      }
+    }
     // Update allowed fields
     const allowedFields = ['name', 'email', 'phone', 'position', 'folder', 'source', 'status', 'priority'];
     allowedFields.forEach(field => {
@@ -326,8 +331,7 @@ export const updateLead = async (req: Request, res: Response): Promise<void> => 
       }
     });
 
-    await lead.save();
-
+    await lead.save({ validateModifiedOnly: true });
     // Populate the response
     await lead.populate('assignedToUser', 'name email');
     await lead.populate('assignedByUser', 'name email');

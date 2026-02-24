@@ -90,7 +90,7 @@ export interface ILeadNote {
   createdAt: Date;
 }
 
-export type LeadSource = 'Website' | 'Social Media' | 'Referral' | 'Import' | 'Manual' | 'Cold Call' | 'Email Campaign';
+export type LeadSource = 'Website' | 'Social Media' | 'Referral' | 'Import' | 'Manual' | 'Cold Call' | 'Email Campaign'|'strategy_call_modal';
 
 // LeadStatus is now dynamic - can be any string
 export type LeadStatus = string;
