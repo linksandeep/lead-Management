@@ -591,8 +591,16 @@ export const addNote = async (req: Request, res: Response): Promise<void> => {
       });
       return;
     }
+
+    // --- FIX STARTS HERE ---
+    // Clean up existing notes array to remove any invalid/empty objects that block saving
+    if (lead.notes && Array.isArray(lead.notes)) {
+      lead.notes = lead.notes.filter(note => note && note.content && note.createdBy) as any;
+    }
     
+    // Call the method to add the new note
     await lead.addNote(content.trim(), new mongoose.Types.ObjectId(req.user.userId));
+    // --- FIX ENDS HERE ---
 
     // Populate the response
     await lead.populate('assignedToUser', 'name email');

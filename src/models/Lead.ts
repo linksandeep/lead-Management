@@ -369,14 +369,17 @@ leadSchema.statics.getTopPerformers = async function () {
 };
 
 // Instance method to add note
+// Replace your existing addNote method with this:
 leadSchema.methods.addNote = function (content: string, createdBy: mongoose.Types.ObjectId) {
   this.notes.push({
     id: new mongoose.Types.ObjectId().toString(),
-    content,
-    createdBy,
+    content: content.trim(),
+    createdBy: createdBy,
     createdAt: new Date()
   } as ILeadNote);
-  return this.save();
+
+  // Use validateModifiedOnly: true to skip validation on old/broken notes
+  return this.save({ validateModifiedOnly: true });
 };
 
 // Pre-save middleware to update lead score based on status
